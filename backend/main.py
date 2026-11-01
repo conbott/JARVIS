@@ -3,8 +3,9 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
-from routers import chat, documents, voice
+from routers import chat, documents, voice, models
 from core.vectorstore import vector_store_manager
+from core.hardware import get_system_hardware
 
 logging.basicConfig(
     level=logging.INFO if not settings.DEBUG else logging.DEBUG,
@@ -15,7 +16,7 @@ logger = logging.getLogger("rag_chatbot")
 app = FastAPI(
     title="Local RAG & Voice Assistant API",
     description="Full-Stack Local RAG + Voice Assistant with Web Search Fallback and Pinecone Cloud Sync",
-    version="1.0.0"
+    version="1.1.0"
 )
 
 # CORS setup for React Vite frontend
@@ -31,11 +32,12 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(documents.router)
 app.include_router(voice.router)
+app.include_router(models.router)
 
 @app.get("/api/health")
 async def health_check():
     """
-    Verifies overall system health, Ollama status, and ChromaDB vector count.
+    Verifies overall system health, Ollama status, dynamic hardware info, and ChromaDB vector count.
     """
     ollama_online = False
     try:
@@ -47,12 +49,14 @@ async def health_check():
         ollama_online = False
 
     stats = vector_store_manager.get_stats()
+    hardware_info = get_system_hardware()
 
     return {
         "status": "healthy",
         "ollama_online": ollama_online,
         "llm_model": settings.LLM_MODEL,
         "embedding_model": settings.EMBEDDING_MODEL,
+        "device_info": hardware_info,
         "vector_store": {
             "type": "ChromaDB",
             "total_chunks": stats.get("total_chunks", 0),

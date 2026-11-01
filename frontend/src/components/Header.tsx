@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, Database, Cloud, FileText, Trash2, Activity } from 'lucide-react';
+import { Cpu, Database, Cloud, FileText, Trash2, Activity, Zap } from 'lucide-react';
 import type { HealthStatus, DocumentStats } from '../types';
 
 interface HeaderProps {
@@ -15,6 +15,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDrawer,
   onClearChat,
 }) => {
+  const hardwareLabel = health?.device_info?.device_name || 'Hardware Accelerated';
+  const isGpu = health?.device_info?.is_gpu ?? true;
+
   return (
     <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-4 py-3 flex items-center justify-between">
       {/* Title & Brand */}
@@ -25,12 +28,20 @@ export const Header: React.FC<HeaderProps> = ({
         <div>
           <h1 className="text-base font-bold text-white flex items-center gap-2">
             Local RAG & Voice Assistant
-            <span className="text-[10px] uppercase font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded">
-              RTX 4050 GPU
+            <span
+              title={`Detected Hardware: ${hardwareLabel}`}
+              className={`text-[10px] uppercase font-semibold border px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                isGpu
+                  ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
+                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+              }`}
+            >
+              <Zap className="w-2.5 h-2.5" />
+              {hardwareLabel}
             </span>
           </h1>
           <p className="text-xs text-slate-400">
-            FastAPI + React • Dual Vector DB (Chroma + Pinecone) • Autonomous Search
+            Universal Local RAG • Dynamic Device Detection • Dual Vector DB (Chroma + Pinecone) • Live Search
           </p>
         </div>
       </div>
@@ -44,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
           {health?.ollama_online ? (
             <span className="flex items-center gap-1 text-emerald-400 font-semibold">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              Online ({health.llm_model})
+              {health.llm_model}
             </span>
           ) : (
             <span className="text-amber-400">Connecting...</span>

@@ -1,6 +1,7 @@
+import re
 import logging
 from typing import List, Dict, Any
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 logger = logging.getLogger(__name__)
 
@@ -8,25 +9,54 @@ class WebSearchEngine:
     def __init__(self, max_results: int = 4):
         self.max_results = max_results
 
+    def clean_search_query(self, query: str) -> str:
+        """
+        Strips conversational framing so search engines get clean keyword queries.
+        e.g. 'can you search the web for quantum computing 2026' -> 'quantum computing 2026'
+        """
+        cleaned = query.strip()
+        # Remove common conversational prefixes
+        patterns = [
+            r'^(can you|could you|please|kindly)?\s*(do a\s+)?(search(\s+the|\s+on|\s+for|\s+web)*\s*:?\s*)',
+            r'^(what is|who is|tell me about|find info on|look up|give me information on)\s+'
+        ]
+        for pattern in patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE).strip()
+
+        # If stripping emptied the query, fallback to original
+        return cleaned if len(cleaned) > 2 else query
+
     def search(self, query: str) -> List[Dict[str, Any]]:
         """
-        Executes a live web search using DuckDuckGo with zero API keys required.
-        Returns a list of structured source records: title, href (url), body (snippet).
+        Executes a live web search using DuckDuckGo via DDGS with zero API keys required.
+        Returns a list of structured source records: title, url, snippet.
         """
         results: List[Dict[str, Any]] = []
-        try:
-            with DDGS() as ddgs:
-                raw_results = ddgs.text(query, max_results=self.max_results)
-                for item in raw_results:
-                    results.append({
-                        "title": item.get("title", "Untitled Source"),
-                        "url": item.get("href", ""),
-                        "snippet": item.get("body", ""),
-                        "source_type": "web"
-                    })
-            logger.info(f"DuckDuckGo search succeeded for '{query}': {len(results)} results found.")
-        except Exception as e:
-            logger.error(f"DuckDuckGo search error for query '{query}': {e}")
+        cleaned_query = self.clean_search_query(query)
+        
+        # Try cleaned query first, then fallback to original query if needed
+        query_candidates = [cleaned_query]
+        if cleaned_query.lower() != query.lower():
+            query_candidates.append(query)
+
+        for q in query_candidates:
+            try:
+                with DDGS() as ddgs:
+                    raw_results = list(ddgs.text(q, max_results=self.max_results))
+                    if raw_results:
+                        for item in raw_results:
+                            results.append({
+                                "title": item.get("title", "Untitled Source"),
+                                "url": item.get("href", ""),
+                                "snippet": item.get("body", ""),
+                                "source_type": "web"
+                            })
+                        logger.info(f"DDGS web search succeeded for '{q}': {len(results)} results found.")
+                        return results
+            except Exception as e:
+                logger.warning(f"DDGS attempt failed for '{q}': {e}")
+
+        logger.info(f"No DDGS search results found for query: '{query}'")
         return results
 
     def format_search_context(self, search_results: List[Dict[str, Any]]) -> str:

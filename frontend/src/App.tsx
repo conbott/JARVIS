@@ -3,7 +3,7 @@ import { Header } from './components/Header';
 import { ChatMessageItem } from './components/ChatMessageItem';
 import { ChatInput } from './components/ChatInput';
 import { DocumentDrawer } from './components/DocumentDrawer';
-import type { ChatMessage, DocumentStats, HealthStatus, SourceItem } from './types';
+import type { ChatMessage, DocumentStats, HealthStatus, SourceItem, SearchMode } from './types';
 import { Sparkles, FileText, Globe, Volume2 } from 'lucide-react';
 
 export default function App() {
@@ -12,6 +12,7 @@ export default function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [stats, setStats] = useState<DocumentStats | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [searchMode, setSearchMode] = useState<SearchMode>('auto');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -71,8 +72,10 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = async (text: string, isVoice: boolean) => {
+  const handleSendMessage = async (text: string, isVoice: boolean, forcedMode?: SearchMode) => {
     if (!text.trim() || isLoading) return;
+
+    const activeMode = forcedMode || searchMode;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -104,6 +107,7 @@ export default function App() {
         body: JSON.stringify({
           query: text,
           chat_history: messages.map((m) => ({ role: m.role, content: m.content })),
+          search_mode: activeMode,
         }),
         signal: controller.signal,
       });
@@ -178,21 +182,23 @@ export default function App() {
             setMessages((prev) =>
               prev.map((m) => (m.id === assistantMsgId ? { ...m, audioUrl } : m))
             );
+
+            // Auto-play synthesized voice
+            const audio = new Audio(audioUrl);
+            audio.play().catch((err) => console.log('Audio autoplay prevented by browser policy:', err));
           }
         } catch (voiceErr) {
-          console.error('Failed to synthesize response audio:', voiceErr);
+          console.error('Voice playback error:', voiceErr);
         }
       }
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
               ? {
                   ...m,
-                  content:
-                    m.content ||
-                    'Connection error: Failed to reach the local backend server. Please verify FastAPI is running.',
+                  content: `⚠️ **Error generating response:** ${error.message || 'Unknown network error'}. Please verify that the backend and Ollama server are running.`,
                 }
               : m
           )
@@ -203,6 +209,9 @@ export default function App() {
       abortControllerRef.current = null;
     }
   };
+
+  const modelLabel = health?.llm_model || 'Local LLM';
+  const hardwareLabel = health?.device_info?.device_name || 'Hardware Accelerated System';
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden">
@@ -226,14 +235,16 @@ export default function App() {
               Next-Gen Local RAG & Voice AI
             </h2>
             <p className="text-sm text-slate-400 mb-8 max-w-md">
-              Powered by <span className="text-indigo-400 font-semibold">Qwen 2.5 Coder (7B)</span> on your RTX 4050 GPU, local <span className="text-cyan-400 font-semibold">ChromaDB</span>, and automatic web search.
+              Powered by <span className="text-indigo-400 font-semibold">{modelLabel}</span> on{' '}
+              <span className="text-purple-400 font-semibold">{hardwareLabel}</span>, local{' '}
+              <span className="text-cyan-400 font-semibold">ChromaDB</span>, and live web search.
             </p>
 
             {/* Quick Starters */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full text-left">
               <button
                 onClick={() =>
-                  handleSendMessage('What are the key capabilities of this local RAG system?', false)
+                  handleSendMessage('What are your main features and capabilities?', false, 'auto')
                 }
                 className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/50 hover:bg-slate-900 hover:border-indigo-500/50 transition group"
               >
@@ -242,7 +253,7 @@ export default function App() {
                   <span>Explore Capabilities</span>
                 </div>
                 <p className="text-xs text-slate-400">
-                  Ask about architecture, models, and zero-cost local execution.
+                  Ask about architecture, hardware adaptation, and local execution.
                 </p>
               </button>
 
@@ -260,17 +271,18 @@ export default function App() {
               </button>
 
               <button
-                onClick={() =>
-                  handleSendMessage('What were the major AI model releases this week?', false)
-                }
-                className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/50 hover:bg-slate-900 hover:border-amber-500/50 transition group"
+                onClick={() => {
+                  setSearchMode('web');
+                  handleSendMessage('What is the latest release and current status of Python in 2026?', false, 'web');
+                }}
+                className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/50 hover:bg-slate-900 hover:border-emerald-500/50 transition group"
               >
-                <div className="flex items-center space-x-2 text-amber-400 font-semibold text-xs mb-1">
+                <div className="flex items-center space-x-2 text-emerald-400 font-semibold text-xs mb-1">
                   <Globe className="w-4 h-4" />
                   <span>Live Web Search</span>
                 </div>
                 <p className="text-xs text-slate-400">
-                  Autonomous DuckDuckGo fallback queries live internet data.
+                  Query real-time internet data and citations with DuckDuckGo.
                 </p>
               </button>
             </div>
@@ -281,7 +293,7 @@ export default function App() {
                 <span>Push-to-Talk Voice Supported</span>
               </span>
               <span>•</span>
-              <span>Pinecone 2GB Cloud Sync Ready</span>
+              <span>Pinecone Cloud Sync Ready</span>
             </div>
           </div>
         ) : (
@@ -299,6 +311,9 @@ export default function App() {
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
         onStopGeneration={handleStopGeneration}
+        searchMode={searchMode}
+        onSearchModeChange={setSearchMode}
+        health={health}
       />
 
       {/* Slide-out Document Drawer */}
