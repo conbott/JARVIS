@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 from typing import List, Dict, Any, Tuple, Optional
 from langchain_core.documents import Document
@@ -7,6 +8,42 @@ from config import settings
 from core.embeddings import embedding_engine
 
 logger = logging.getLogger(__name__)
+
+def is_reference_chunk(text: str) -> bool:
+    """
+    Detects if a chunk primarily contains bibliographic citations / reference lists.
+    Flags high density of [n] bracketed citations, 'arXiv preprint', 'et al.', and bibliography entries.
+    """
+    t_lower = text.lower()
+    has_ref_header = bool(re.search(r'\b(references|bibliography)\b', t_lower))
+    bracket_entries = len(re.findall(r'(?:^|\n)\s*\[\d+\]', text))
+    if bracket_entries >= 2:
+        return True
+    if has_ref_header and bracket_entries >= 1:
+        return True
+
+    citations = re.findall(r'\[\d+\]', text)
+    has_arxiv = "arxiv preprint" in t_lower or "arxiv:" in t_lower
+    has_proc = "in proc." in t_lower or "in proceedings" in t_lower or "advances in neural" in t_lower
+    et_als = len(re.findall(r'\bet\s+al\.?', text, flags=re.IGNORECASE))
+
+    # Multiple bracketed citations with publication markers
+    if len(citations) >= 3 and (has_arxiv or has_proc):
+        return True
+    if len(citations) >= 2 and has_arxiv and et_als >= 2:
+        return True
+    if has_arxiv and et_als >= 3 and ("pages " in t_lower or "vol." in t_lower):
+        return True
+    return False
+
+def is_title_authors_chunk(text: str) -> bool:
+    """
+    Detects if a chunk is the title/author/affiliation metadata block at the start of a paper.
+    """
+    t_lower = text.lower()
+    has_emails = len(re.findall(r'[\w\.-]+@[\w\.-]+\.\w+', text)) >= 2
+    has_affil = any(k in t_lower for k in ["university", "google brain", "google research", "department of", "laboratory"])
+    return has_emails or (has_affil and "abstract" in t_lower[:500])
 
 class VectorStoreManager:
     def __init__(self):
@@ -48,6 +85,77 @@ class VectorStoreManager:
             # Fallback to standard similarity search if relevance scores fail
             docs = self.chroma.similarity_search(query, k=k)
             return [(d, 0.7) for d in docs]
+
+    def get_spread_chunks(self, limit: int = 8) -> List[Tuple[Document, float]]:
+        """
+        Retrieves up to `limit` chunks spread evenly across the indexed documents.
+        - Skips chunks that look like a reference list (many [n] citations, arXiv preprint, et al. density)
+        - Always includes the first content chunk after title/authors (abstract)
+        - Always includes the last non-reference chunk if present
+        - Fills the rest evenly across the corpus in page order
+        Returns list of (Document, score) where score is 1.0 (indicating full-corpus synthesis).
+        """
+        try:
+            collection = self.chroma._collection
+            data = collection.get(include=["documents", "metadatas"])
+            raw_docs = data.get("documents", [])
+            metas = data.get("metadatas", [])
+            if not raw_docs:
+                return []
+
+            items = []
+            for i, (text, meta) in enumerate(zip(raw_docs, metas)):
+                m = meta or {}
+                page = m.get("page")
+                try:
+                    page_num = int(page) if page is not None else 0
+                except (ValueError, TypeError):
+                    page_num = 0
+                source_name = str(m.get("source", ""))
+                items.append((source_name, page_num, i, text, m))
+
+            # Sort by source name, then page number, then original order
+            items.sort(key=lambda x: (x[0], x[1], x[2]))
+
+            # Filter out chunks that look like a reference list
+            content_items = [it for it in items if not is_reference_chunk(it[3])]
+            if not content_items:
+                content_items = items  # Fallback if all chunks were flagged
+
+            total_content = len(content_items)
+            if total_content <= limit:
+                selected_items = content_items
+            else:
+                # Find first content chunk after title/authors (abstract)
+                first_content_idx = 0
+                if total_content > 1 and is_title_authors_chunk(content_items[0][3]):
+                    first_content_idx = 1
+
+                # Last non-reference chunk
+                last_content_idx = total_content - 1
+
+                middle_count = limit - 2
+                pool_indices = list(range(first_content_idx + 1, last_content_idx))
+                if len(pool_indices) <= middle_count:
+                    chosen_pool = pool_indices
+                else:
+                    step = (len(pool_indices) - 1) / float(middle_count - 1) if middle_count > 1 else 0
+                    chosen_pool = [pool_indices[int(round(k * step))] for k in range(middle_count)]
+                    chosen_pool = sorted(list(dict.fromkeys(chosen_pool)))
+
+                final_indices = [first_content_idx] + chosen_pool + [last_content_idx]
+                final_indices = sorted(list(dict.fromkeys(final_indices)))
+                selected_items = [content_items[idx] for idx in final_indices]
+
+            result: List[Tuple[Document, float]] = []
+            for it in selected_items:
+                _, _, _, text, m = it
+                doc = Document(page_content=text, metadata=m)
+                result.append((doc, 1.0))
+            return result
+        except Exception as e:
+            logger.error(f"Error retrieving spread chunks: {e}")
+            return []
 
     def get_stats(self) -> Dict[str, Any]:
         """

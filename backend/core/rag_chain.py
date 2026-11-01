@@ -69,6 +69,29 @@ def is_realtime_query(query: str) -> bool:
     ]
     return any(re.search(p, q) for p in patterns)
 
+def is_summary_query(query: str) -> bool:
+    """
+    Checks if the user query is asking for a document-level summary, overview,
+    breakdown, analysis, key takeaways, or main points across the indexed documents.
+    """
+    q = query.lower().strip()
+    summary_patterns = [
+        r'\b(summarize|summarise|summary)\b',
+        r'\b(overview|key findings|main points|key takeaways|executive summary)\b',
+        r'\b(what is this (paper|doc|document|pdf) about)\b',
+        r'\b(what are (these|the) (papers|docs|documents|pdfs) about)\b',
+        r'\b(what does this (paper|doc|document|pdf) (talk|say) about)\b',
+        r'\b(explain (this|the) (paper|document|pdf))\b',
+        r'\b(tell me about (this|the) (paper|document|pdf))\b',
+        r'\b(give me a summary|brief overview)\b',
+        r'\b(analy[zs]e)\b.*?\b(paper|document|doc|pdf|work)\b',
+        r'\banalysis\s+of\b.*?\b(paper|document|doc|pdf|work)\b',
+        r'\bbreak\s*down\b.*?\b(paper|document|doc|pdf|work)\b',
+        r'\b(analy[zs]e|break\s*down)\s+(this|the|my)?\s*(paper|doc|document|pdf)\b',
+        r'\b(analysis|breakdown)\s+of\s+(this|the|my)?\s*(paper|doc|document|pdf)\b'
+    ]
+    return any(re.search(p, q) for p in summary_patterns)
+
 SYSTEM_PROMPT_DIRECT = """You are an advanced, intelligent Local RAG & Voice AI Assistant.
 System Knowledge & Environment:
 - Real-Time Clock: {current_time}
@@ -222,6 +245,7 @@ class RAGPipeline:
         sources: List[Dict[str, Any]] = []
         source_type = "direct"
         path = "direct"
+        retrieval: Optional[str] = None
         fallback_reason: Optional[str] = None
         best_score: Optional[float] = None
         context_text = ""
@@ -268,9 +292,28 @@ class RAGPipeline:
                 "source_type": "web"
             }
 
+        # Check for Document Summary / Overview Request (skip similarity threshold, sample across corpus)
+        if search_mode in ["auto", "docs"] and total_chunks > 0 and is_summary_query(standalone_query):
+            path = "document"
+            source_type = "document"
+            retrieval = "spread"
+            fallback_reason = None
+            best_score = 1.0  # Intentional multi-page corpus synthesis
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Synthesizing document overview across pages...'})}\n\n"
+            spread_docs = vector_store_manager.get_spread_chunks(limit=8)
+            context_blocks = []
+            for doc, sc in spread_docs:
+                src_name = doc.metadata.get("source", "Uploaded Document")
+                page = doc.metadata.get("page", 1)
+                context_blocks.append(f"--- Document: {src_name} (Page/Chunk: {page}) ---\n{doc.page_content}")
+                sources.append(format_doc_source(doc, sc))
+            context_text = "\n\n".join(context_blocks)
+            system_prompt = SYSTEM_PROMPT_RAG.format(current_time=current_time_str)
+
         # MODE: Forced Web Search
-        if search_mode == "web":
+        elif search_mode == "web":
             path = "web"
+            retrieval = "similarity"
             fallback_reason = "forced_web"
             yield f"data: {json.dumps({'type': 'status', 'message': f'Searching the web for: \"{standalone_query}\"...'})}\n\n"
             search_results = web_search_engine.search(standalone_query)
@@ -284,13 +327,14 @@ class RAGPipeline:
         elif search_mode == "docs":
             yield f"data: {json.dumps({'type': 'status', 'message': 'Searching uploaded documents in ChromaDB...'})}\n\n"
             if total_chunks > 0:
+                retrieval = "similarity"
                 doc_results = vector_store_manager.search_with_scores(standalone_query, k=settings.SIMILARITY_K)
                 if doc_results:
                     path = "document"
                     source_type = "document"
-                    fallback_reason = None
                     raw_best = float(max([s for _, s in doc_results]))
                     best_score = round(raw_best, 3)
+                    fallback_reason = "low_confidence" if raw_best < self.threshold else None
                     context_blocks = []
                     for doc, score in doc_results:
                         src_name = doc.metadata.get("source", "Uploaded Document")
@@ -319,6 +363,7 @@ class RAGPipeline:
                     if raw_best >= self.threshold:
                         path = "document"
                         source_type = "document"
+                        retrieval = "similarity"
                         fallback_reason = None
                         context_blocks = []
                         for doc, score in doc_results:
@@ -344,6 +389,7 @@ class RAGPipeline:
                 if search_results:
                     path = "web"
                     source_type = "web"
+                    retrieval = "similarity"
                     context_text = web_search_engine.format_search_context(search_results)
                     sources = [format_web_source(r) for r in search_results]
                     system_prompt = SYSTEM_PROMPT_SEARCH.format(current_time=current_time_str)
@@ -357,6 +403,7 @@ class RAGPipeline:
             "type": "sources",
             "source_type": source_type,
             "path": path,
+            "retrieval": retrieval,
             "fallback_reason": fallback_reason,
             "best_score": best_score,
             "threshold": self.threshold,

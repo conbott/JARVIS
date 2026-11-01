@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen2.5-coder:7b")
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "qwen3-embedding:0.6b")
+    OLLAMA_NUM_CTX: int = int(os.getenv("OLLAMA_NUM_CTX", "4096"))  # Minimum 4096 tokens for multi-turn/context RAG
 
     # Local ChromaDB Vector Store
     CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")

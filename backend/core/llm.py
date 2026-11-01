@@ -19,6 +19,7 @@ class OllamaLLMClient:
                 base_url=self.base_url,
                 model=self.model_name,
                 temperature=0.2,
+                num_ctx=settings.OLLAMA_NUM_CTX,
             )
         return self._langchain_llm
 
@@ -44,6 +45,7 @@ class OllamaLLMClient:
             "options": {
                 "temperature": 0.2,
                 "top_p": 0.9,
+                "num_ctx": settings.OLLAMA_NUM_CTX,
             }
         }
 

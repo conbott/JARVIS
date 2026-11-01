@@ -1,34 +1,69 @@
-# Python
+# Environment & Secrets
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+!**/.env.example
+*key*.json
+*secret*
+*credentials*
+
+# ChromaDB & Vector Store Data
+chroma_db/
+**/chroma_db/
+backend/chroma_db/
+data/
+backend/data/
+**/data/
+
+# Uploads & Temporary Files
+temp_uploads/
+backend/temp_uploads/
+**/temp_uploads/
+
+# Node / Frontend Build
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.local
+
+# Python Environments & Bytecode
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-backend/.venv/
 .venv/
-env/
+**/.venv/
 venv/
+**/venv/
+env/
+**/env/
 ENV/
-*.env
-
-# ChromaDB local storage
-backend/chroma_db/
-chroma_db/
-temp_uploads/
-backend/temp_uploads/
-
-# Node / Frontend
-frontend/node_modules/
-node_modules/
-frontend/dist/
-dist/
-*.local
 
 # Logs
 *.log
+**/*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Downloaded Models & Audio Cache Files
+*.mp3
+*.wav
+*.ogg
+*.flac
+*.bin
+*.safetensors
+*.gguf
+*.onnx
+models/
+**/models/
+audio_cache/
+**/audio_cache/
 
 # Editor / OS
 .vscode/

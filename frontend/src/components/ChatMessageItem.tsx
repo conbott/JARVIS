@@ -201,7 +201,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                                 p.{src.page}
                               </span>
                             )}
-                            {src.score != null && (
+                            {src.score != null && message.retrieval !== 'spread' && (
                               <span className="text-[10px] text-[var(--color-accent)] font-mono ml-0.5">
                                 {Math.round(src.score * 100)}%
                               </span>

@@ -15,6 +15,7 @@ export interface ChatMessage {
   content: string;
   source_type?: 'document' | 'web' | 'direct';
   path?: 'document' | 'web' | 'direct';
+  retrieval?: 'spread' | 'similarity' | null;
   fallback_reason?: 'low_confidence' | 'empty_store' | 'realtime_query' | 'forced_web' | null;
   best_score?: number | null;
   threshold?: number;
