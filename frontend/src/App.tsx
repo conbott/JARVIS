@@ -15,7 +15,7 @@ import type {
   SearchMode,
   VoiceOption,
 } from './types';
-import { UploadCloud, ArrowUpRight } from 'lucide-react';
+import { UploadCloud, ArrowUpRight, Leaf, Sparkles, FileText, Globe } from 'lucide-react';
 
 export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
@@ -466,16 +466,9 @@ export default function App() {
     }
   };
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  };
-
   return (
-    <div className="flex h-screen bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden font-sans select-text selection:bg-[var(--color-accent)]/20 selection:text-[var(--color-text)]">
-      {/* Collapsible Session Sidebar */}
+    <div className="flex h-screen bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden font-sans select-text selection:bg-[var(--color-accent-soft)] selection:text-[var(--color-text)]">
+      {/* Collapsible Session Sidebar using --color-sidebar */}
       <Sidebar
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -487,7 +480,7 @@ export default function App() {
         health={health}
       />
 
-      {/* Main Chat Workspace */}
+      {/* Main Chat Workspace using --color-bg */}
       <div className="flex-1 flex flex-col h-full z-10 relative overflow-hidden bg-[var(--color-bg)]">
         {/* Slim Top Header */}
         <Header
@@ -505,13 +498,18 @@ export default function App() {
         {/* Messages Stream - Centered column max-w ~720px */}
         <main className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-[720px] mx-auto w-full">
-              {/* Short serif greeting */}
+            <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-[720px] mx-auto w-full select-none">
+              {/* Leaf Mark in Accent */}
+              <div className="w-10 h-10 rounded-xl bg-[var(--color-accent-soft)] flex items-center justify-center mb-4 text-[var(--color-accent)]">
+                <Leaf className="w-5 h-5" />
+              </div>
+
+              {/* Centered Serif Greeting */}
               <h2 className="font-serif text-3xl font-medium text-[var(--color-text)] mb-2 tracking-tight">
-                {getGreeting()}
+                What would you like to explore?
               </h2>
-              <p className="text-sm font-sans text-[var(--color-text-muted)] mb-8">
-                How can I assist you with your documents or research today?
+              <p className="text-sm font-sans text-[var(--color-muted)] mb-8">
+                Search live web topics, or query your uploaded knowledge documents.
               </p>
 
               {/* 3 Suggested Prompts as small cards */}
@@ -520,13 +518,16 @@ export default function App() {
                   onClick={() =>
                     handleSendMessage('Summarize the key findings from my uploaded documents.', false, 'docs')
                   }
-                  className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] transition text-left cursor-pointer group"
+                  className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] hover:border-[var(--color-accent)]/50 transition text-left cursor-pointer group"
                 >
                   <div className="flex items-center justify-between text-xs text-[var(--color-text)] font-medium mb-1">
-                    <span>Summarize documents</span>
-                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] transition" />
+                    <span className="flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                      Summarize
+                    </span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-muted)] group-hover:text-[var(--color-accent)] transition" />
                   </div>
-                  <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                  <p className="text-[11px] text-[var(--color-muted)] leading-relaxed">
                     Query local ChromaDB vectors for document summaries.
                   </p>
                 </button>
@@ -535,13 +536,16 @@ export default function App() {
                   onClick={() =>
                     handleSendMessage('What are the key technical points and takeaways?', false, 'auto')
                   }
-                  className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] transition text-left cursor-pointer group"
+                  className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] hover:border-[var(--color-accent)]/50 transition text-left cursor-pointer group"
                 >
                   <div className="flex items-center justify-between text-xs text-[var(--color-text)] font-medium mb-1">
-                    <span>Key takeaways</span>
-                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] transition" />
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                      Key takeaways
+                    </span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-muted)] group-hover:text-[var(--color-accent)] transition" />
                   </div>
-                  <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                  <p className="text-[11px] text-[var(--color-muted)] leading-relaxed">
                     Extract structured bullet points and insights.
                   </p>
                 </button>
@@ -550,29 +554,32 @@ export default function App() {
                   onClick={() =>
                     handleSendMessage('Search the web for the latest updates on this topic.', false, 'web')
                   }
-                  className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] transition text-left cursor-pointer group"
+                  className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] hover:border-[var(--color-accent)]/50 transition text-left cursor-pointer group"
                 >
                   <div className="flex items-center justify-between text-xs text-[var(--color-text)] font-medium mb-1">
-                    <span>Search the web</span>
-                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] transition" />
+                    <span className="flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                      Search the web
+                    </span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-muted)] group-hover:text-[var(--color-accent)] transition" />
                   </div>
-                  <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                  <p className="text-[11px] text-[var(--color-muted)] leading-relaxed">
                     Fetch live web information via DuckDuckGo.
                   </p>
                 </button>
               </div>
 
-              {/* Dashed upload hint */}
+              {/* Dashed Accent-Tinted Dropzone Hint */}
               <button
                 onClick={() => setIsDrawerOpen(true)}
-                className="w-full mt-6 border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)]/50 rounded-xl p-3.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition cursor-pointer flex items-center justify-center gap-2"
+                className="w-full mt-6 border border-dashed border-[var(--color-accent)]/30 hover:border-[var(--color-accent)]/60 rounded-xl p-3.5 text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition cursor-pointer flex items-center justify-center gap-2"
               >
                 <UploadCloud className="w-4 h-4 text-[var(--color-accent)]" />
                 <span>Drop documents or click to open knowledge drawer</span>
               </button>
             </div>
           ) : (
-            <div className="max-w-[720px] mx-auto w-full py-6 space-y-6">
+            <div className="max-w-[720px] mx-auto w-full py-4 space-y-6">
               {messages.map((msg) => (
                 <ChatMessageItem
                   key={msg.id}
@@ -585,7 +592,7 @@ export default function App() {
 
               {/* Calm Inline Thinking Status */}
               {isLoading && liveStatus && (
-                <div className="py-2">
+                <div className="py-1">
                   <ThinkingStatus statusMessage={liveStatus} searchMode={searchMode} />
                 </div>
               )}

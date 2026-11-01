@@ -72,12 +72,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   );
 
   return (
-    <aside className="w-68 bg-[#181716] border-r border-[var(--color-border)] flex flex-col h-full z-20 shrink-0 select-none font-sans">
+    <aside className="w-68 bg-[var(--color-sidebar)] border-r border-[var(--color-border)] flex flex-col h-full z-20 shrink-0 select-none font-sans">
       {/* Top Header: Quiet New Chat Button & Close Sidebar */}
       <div className="p-3 border-b border-[var(--color-border)] flex items-center justify-between gap-2">
         <button
           onClick={onNewSession}
-          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] border border-[var(--color-border)] text-xs text-[var(--color-text)] transition"
+          className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] border border-[var(--color-border)] text-xs text-[var(--color-text)] transition cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5 text-[var(--color-accent)]" />
           <span>New chat</span>
@@ -86,7 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={onToggle}
           title="Close sidebar"
-          className="p-2 rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition"
+          className="p-2 rounded-xl text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition cursor-pointer"
         >
           <PanelLeftClose className="w-4 h-4" />
         </button>
@@ -95,13 +95,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Grouped Session List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-4">
         {sessions.length === 0 ? (
-          <div className="px-3 py-8 text-center text-xs text-[var(--color-text-muted)]">
+          <div className="px-3 py-8 text-center text-xs text-[var(--color-muted)]">
             No previous conversations.
           </div>
         ) : (
           groupKeys.map((group) => (
             <div key={group} className="space-y-1">
-              <div className="px-2 py-1 text-[11px] font-medium text-[var(--color-text-muted)]">
+              <div className="px-2 py-1 text-[11px] font-medium text-[var(--color-muted)]">
                 {group}
               </div>
               {groups[group].map((session) => {
@@ -112,12 +112,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onClick={() => onSelectSession(session.id)}
                     className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition ${
                       isActive
-                        ? 'bg-[var(--color-surface-2)] text-[var(--color-text)] font-medium'
-                        : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]'
+                        ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)] font-medium border border-[var(--color-accent)]/20'
+                        : 'text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] border border-transparent'
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
-                      <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                      <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-70" />
                       <span className="truncate">{session.title || 'Untitled'}</span>
                     </div>
 
@@ -136,13 +136,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Footer: Single quiet muted line */}
-      <div className="p-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs text-[var(--color-text-muted)]">
+      {/* Footer: Single quiet line */}
+      <div className="p-3 border-t border-[var(--color-border)] flex items-center justify-between text-xs text-[var(--color-muted)]">
         <div className="flex items-center gap-2 truncate">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] shrink-0" />
           <span className="font-mono text-[11px] truncate">{modelName}</span>
         </div>
-        <span className="text-[10px] text-[var(--color-text-muted)] font-mono">Ready</span>
+        <span className="text-[10px] text-[var(--color-muted)] font-mono">Ready</span>
       </div>
     </aside>
   );

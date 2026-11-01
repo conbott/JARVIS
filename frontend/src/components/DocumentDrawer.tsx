@@ -56,9 +56,10 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
         throw new Error(data.detail || 'Upload failed');
       }
 
+      const chunkLabel = data.chunks_added === 1 ? '1 chunk' : `${data.chunks_added} chunks`;
       setFeedback({
         type: 'success',
-        text: `Indexed "${data.filename}" (${data.chunks_added} chunks).`,
+        text: `Indexed "${data.filename}" (${chunkLabel}).`,
       });
       onRefreshStats();
     } catch (err: any) {
@@ -93,10 +94,11 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
       }
 
       const count = data.synced_count ?? stats?.total_chunks ?? 0;
-      setSyncStatus(`synced ${count} vectors`);
+      const countLabel = count === 1 ? '1 vector' : `${count} vectors`;
+      setSyncStatus(`synced ${countLabel}`);
       setFeedback({
         type: 'success',
-        text: data.message || `Successfully synced ${count} vectors to Pinecone!`,
+        text: data.message || `Successfully synced ${countLabel} to Pinecone!`,
       });
     } catch (err: any) {
       setSyncStatus('idle');
@@ -131,11 +133,11 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
         onClick={onClose}
       />
 
-      {/* Drawer */}
+      {/* Drawer using --color-surface */}
       <div className="relative w-96 max-w-full bg-[var(--color-surface)] border-l border-[var(--color-border)] p-6 flex flex-col justify-between shadow-2xl z-10 overflow-y-auto font-sans">
         <div>
           {/* Header */}
@@ -146,7 +148,7 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
             </h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition"
+              className="p-1 rounded-lg text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition cursor-pointer"
               title="Close drawer"
             >
               <X className="w-4 h-4" />
@@ -158,7 +160,7 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
             <div
               className={`mt-4 p-3 rounded-xl border text-xs flex items-start gap-2 ${
                 feedback.type === 'success'
-                  ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)] border-[var(--color-accent)]/20'
+                  ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)] border-[var(--color-accent)]/20'
                   : 'bg-[var(--color-warn)]/10 text-[var(--color-warn)] border-[var(--color-warn)]/20'
               }`}
             >
@@ -171,7 +173,7 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
             </div>
           )}
 
-          {/* Dropzone */}
+          {/* Dropzone with accent tint */}
           <div className="mt-5">
             <input
               type="file"
@@ -182,13 +184,13 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
             />
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)]/60 rounded-2xl p-6 text-center transition cursor-pointer bg-[var(--color-surface-2)]/30 group"
+              className="border-2 border-dashed border-[var(--color-accent)]/30 hover:border-[var(--color-accent)]/70 rounded-2xl p-6 text-center transition cursor-pointer bg-[var(--color-surface-2)]/30 group"
             >
-              <UploadCloud className="w-7 h-7 mx-auto text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] transition mb-2" />
+              <UploadCloud className="w-7 h-7 mx-auto text-[var(--color-muted)] group-hover:text-[var(--color-accent)] transition mb-2" />
               <div className="text-xs font-medium text-[var(--color-text)]">
                 {isUploading ? 'Chunking and embedding document...' : 'Click or drop files to index'}
               </div>
-              <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
+              <p className="text-[11px] text-[var(--color-muted)] mt-1">
                 PDF, TXT, or MD documents
               </p>
             </div>
@@ -197,17 +199,17 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
           {/* Uploaded Documents List */}
           <div className="mt-6">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)]">
                 Indexed Documents ({documents.length})
               </span>
-              <span className="text-[11px] font-mono text-[var(--color-text-muted)]">
-                {totalChunks} total chunks
+              <span className="text-[11px] font-mono text-[var(--color-muted)]">
+                {totalChunks} {totalChunks === 1 ? 'chunk' : 'chunks'}
               </span>
             </div>
 
             <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
               {documents.length === 0 ? (
-                <div className="p-4 rounded-xl bg-[var(--color-surface-2)]/40 border border-[var(--color-border)] text-center text-xs text-[var(--color-text-muted)]">
+                <div className="p-4 rounded-xl bg-[var(--color-surface-2)]/40 border border-[var(--color-border)] text-center text-xs text-[var(--color-muted)]">
                   No documents in local ChromaDB yet.
                 </div>
               ) : (
@@ -239,11 +241,11 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
           {/* Pinecone Cloud Sync Section */}
           <div className="mt-6 pt-5 border-t border-[var(--color-border)]">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] flex items-center gap-1.5">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] flex items-center gap-1.5">
                 <Cloud className="w-3.5 h-3.5 text-[var(--color-accent)]" />
                 Pinecone Cloud Sync
               </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--color-surface-2)] text-[var(--color-accent)]">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
                 Status: {syncStatus}
               </span>
             </div>
@@ -254,24 +256,25 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
                 placeholder="Optional Pinecone API Key (or env)"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="w-full bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] font-mono"
+                className="w-full bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder-[var(--color-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] font-mono"
               />
               <input
                 type="text"
                 placeholder="Pinecone Index Name"
                 value={indexName}
                 onChange={(e) => setIndexName(e.target.value)}
-                className="w-full bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] font-mono"
+                className="w-full bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder-[var(--color-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] font-mono"
               />
 
+              {/* Primary action: Solid accent fill */}
               <button
                 onClick={handleSyncPinecone}
                 disabled={isSyncing || totalChunks === 0}
-                className="w-full mt-1 py-2 px-3 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] hover:text-[var(--color-accent)] transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="w-full mt-1 py-2 px-3 rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-fg)] font-medium text-xs hover:opacity-90 transition flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs"
               >
                 {isSyncing ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-accent)]" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>Syncing ChromaDB vectors to Pinecone...</span>
                   </>
                 ) : (
@@ -286,11 +289,11 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="pt-4 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-muted)] flex items-center justify-between">
+        <div className="pt-4 border-t border-[var(--color-border)] text-[11px] text-[var(--color-muted)] flex items-center justify-between">
           <span>ChromaDB + Pinecone Dual Store</span>
           <button
             onClick={onRefreshStats}
-            className="hover:text-[var(--color-text)] transition flex items-center gap-1"
+            className="hover:text-[var(--color-text)] transition flex items-center gap-1 cursor-pointer"
           >
             <RefreshCw className="w-3 h-3" />
             <span>Refresh</span>

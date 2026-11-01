@@ -32,8 +32,8 @@ const CodeBlock: React.FC<{ language?: string; value: string }> = ({ language, v
   };
 
   return (
-    <div className="relative my-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden font-mono text-xs">
-      <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-muted)] text-[11px]">
+    <div className="relative my-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden font-mono text-xs">
+      <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-muted)] text-[11px]">
         <span>{language || 'code'}</span>
         <button
           onClick={handleCopy}
@@ -98,16 +98,16 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   const fallbackExplanation = getFallbackExplanation(message.fallback_reason);
 
   return (
-    <div className={`py-6 px-4 md:px-0 group ${isUser ? 'flex justify-end' : ''}`}>
-      <div className={`w-full ${isUser ? 'max-w-[80%]' : 'max-w-full'}`}>
-        {/* User Message Bubble */}
+    <div className={`py-1.5 md:py-2 px-4 md:px-0 group ${isUser ? 'flex justify-end' : ''}`}>
+      <div className={`w-full ${isUser ? 'flex justify-end' : ''}`}>
+        {/* User Message: right-aligned, width fits content (max 80%), accent-soft bg, 1px accent 20% border */}
         {isUser ? (
-          <div className="bg-[var(--color-surface-2)] text-[var(--color-text)] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed whitespace-pre-wrap ml-auto border border-[var(--color-border)]">
+          <div className="w-fit max-w-[80%] ml-auto bg-[var(--color-accent-soft)] border border-[var(--color-accent)]/20 text-[var(--color-text)] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed whitespace-pre-wrap">
             {message.content}
           </div>
         ) : (
-          /* Assistant Message: NO bubble, plain text on background, warm serif */
-          <div className="space-y-4">
+          /* Assistant Message: NO bubble, plain text on background, warm serif 17px/1.7 */
+          <div className="space-y-3.5 max-w-full">
             {/* Assistant Body */}
             <div className="prose-claude text-[17px] leading-[1.7] text-[var(--color-text)] font-serif max-w-none">
               <ReactMarkdown
@@ -153,7 +153,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 
             {/* Sources Block (Under Assistant Message) */}
             {allSources.length > 0 && (
-              <div className="pt-2 font-sans">
+              <div className="pt-1 font-sans">
                 {/* Source Label & Reason Row */}
                 <div className="flex flex-wrap items-center gap-2 text-xs mb-2">
                   {message.path === 'web' || message.source_type === 'web' ? (
@@ -162,7 +162,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                       Searched the web
                     </span>
                   ) : (
-                    <span className="font-medium text-[var(--color-text-muted)] flex items-center gap-1.5">
+                    <span className="font-medium text-[var(--color-muted)] flex items-center gap-1.5">
                       <FileText className="w-3.5 h-3.5 text-[var(--color-accent)]" />
                       From your documents
                     </span>
@@ -170,8 +170,8 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 
                   {fallbackExplanation && (
                     <>
-                      <span className="text-[var(--color-text-muted)] opacity-40">•</span>
-                      <span className="text-[var(--color-text-muted)] text-[11px]">
+                      <span className="text-[var(--color-muted)] opacity-40">•</span>
+                      <span className="text-[var(--color-muted)] text-[11px]">
                         {fallbackExplanation}
                       </span>
                     </>
@@ -190,14 +190,14 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                         <div key={idx} className="flex flex-col">
                           <button
                             onClick={() => setExpandedDocIdx(isExpanded ? null : idx)}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] border border-[var(--color-border)] text-xs text-[var(--color-text)] transition text-left cursor-pointer"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/50 text-xs text-[var(--color-text)] transition text-left cursor-pointer"
                           >
                             <FileText className="w-3 h-3 text-[var(--color-accent)] shrink-0" />
-                            <span className="font-mono text-[11px] truncate max-w-[140px]">
+                            <span className="font-mono text-[11px] truncate max-w-[150px]">
                               {src.filename || src.title}
                             </span>
                             {src.page && (
-                              <span className="text-[10px] text-[var(--color-text-muted)] font-mono">
+                              <span className="text-[10px] text-[var(--color-muted)] font-mono">
                                 p.{src.page}
                               </span>
                             )}
@@ -210,7 +210,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 
                           {/* Inline Expandable Snippet */}
                           {isExpanded && src.snippet && (
-                            <div className="mt-1.5 p-2.5 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border)] text-xs text-[var(--color-text-muted)] leading-relaxed max-w-lg">
+                            <div className="mt-1.5 p-2.5 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border)] text-xs text-[var(--color-muted)] leading-relaxed max-w-lg">
                               {src.snippet}
                             </div>
                           )}
@@ -225,17 +225,17 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                         href={src.url || '#'}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] border border-[var(--color-border)] text-xs text-[var(--color-text)] transition group/chip"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/50 text-xs text-[var(--color-text)] transition group/chip"
                         title={src.title}
                       >
                         <Globe className="w-3 h-3 text-[var(--color-warn)] shrink-0" />
-                        <span className="font-mono text-[11px] text-[var(--color-text-muted)] truncate max-w-[110px]">
+                        <span className="font-mono text-[11px] text-[var(--color-muted)] truncate max-w-[110px]">
                           {domain || 'web'}
                         </span>
                         <span className="truncate max-w-[150px] text-[var(--color-text)] font-sans">
                           {src.title}
                         </span>
-                        <ExternalLink className="w-2.5 h-2.5 text-[var(--color-text-muted)] opacity-60 group-hover/chip:opacity-100 transition" />
+                        <ExternalLink className="w-2.5 h-2.5 text-[var(--color-muted)] opacity-60 group-hover/chip:opacity-100 transition" />
                       </a>
                     );
                   })}
@@ -245,7 +245,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                 {allSources.length > 4 && (
                   <button
                     onClick={() => setShowAllSources(!showAllSources)}
-                    className="mt-2 text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] flex items-center gap-1 transition cursor-pointer"
+                    className="mt-2 text-[11px] text-[var(--color-muted)] hover:text-[var(--color-text)] flex items-center gap-1 transition cursor-pointer"
                   >
                     {showAllSources ? (
                       <>
@@ -264,10 +264,10 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
             )}
 
             {/* Message Actions (Copy, Speak): small, muted, visible on hover */}
-            <div className="flex items-center gap-2 pt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity font-sans text-xs">
+            <div className="flex items-center gap-2 pt-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity font-sans text-xs">
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-1 px-2 py-1 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition cursor-pointer"
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] transition cursor-pointer"
                 title="Copy response"
               >
                 {copied ? (
@@ -289,8 +289,8 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                   disabled={isSynthesizingAudio}
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition cursor-pointer ${
                     isPlayingAudio
-                      ? 'text-[var(--color-accent)] bg-[var(--color-surface-2)]'
-                      : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]'
+                      ? 'text-[var(--color-accent)] bg-[var(--color-accent-soft)]'
+                      : 'text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)]'
                   }`}
                   title={isPlayingAudio ? 'Stop speaking' : 'Speak answer aloud'}
                 >

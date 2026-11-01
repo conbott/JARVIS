@@ -228,7 +228,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     <div className="w-full max-w-[720px] mx-auto px-4 md:px-0">
       {/* Attached Documents Chips */}
       {docCount > 0 && stats?.documents && (
-        <div className="flex items-center gap-1.5 mb-2 overflow-x-auto py-1 text-xs text-[var(--color-text-muted)] font-sans">
+        <div className="flex items-center gap-1.5 mb-2 overflow-x-auto py-1 text-xs text-[var(--color-muted)] font-sans">
           <span className="text-[11px] shrink-0">Attached:</span>
           {stats.documents.slice(0, 3).map((doc, idx) => (
             <span
@@ -240,20 +240,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </span>
           ))}
           {stats.documents.length > 3 && (
-            <span className="text-[10px] text-[var(--color-text-muted)] font-mono">
+            <span className="text-[10px] text-[var(--color-muted)] font-mono">
               +{stats.documents.length - 3} more
             </span>
           )}
-          <span className="text-[10px] text-[var(--color-text-muted)] font-mono ml-auto shrink-0">
-            {chunkCount} chunks
+          <span className="text-[10px] text-[var(--color-muted)] font-mono ml-auto shrink-0">
+            {chunkCount} {chunkCount === 1 ? 'chunk' : 'chunks'}
           </span>
         </div>
       )}
 
-      {/* Main Floating Box */}
+      {/* Main Floating Box using --color-surface */}
       <div
         className={`relative rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] p-3 transition-all shadow-sm ${
-          isFocused ? 'ring-1 ring-[var(--color-accent)]/50 border-[var(--color-border)]' : ''
+          isFocused ? 'ring-1 ring-[var(--color-accent)]/60 border-[var(--color-accent)]/40' : ''
         }`}
       >
         {/* Recording Waveform State */}
@@ -274,14 +274,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={cancelRecording}
-                className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition text-xs"
+                className="p-1.5 rounded-lg text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition text-xs cursor-pointer"
                 title="Cancel recording"
               >
                 <X className="w-4 h-4" />
               </button>
               <button
                 onClick={stopRecording}
-                className="px-3 py-1 rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-fg)] text-xs font-medium hover:opacity-90 transition flex items-center gap-1"
+                className="px-3 py-1 rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-fg)] text-xs font-medium hover:opacity-90 transition flex items-center gap-1 cursor-pointer"
                 title="Finish recording and transcribe"
               >
                 <Check className="w-3.5 h-3.5" />
@@ -290,7 +290,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </div>
           </div>
         ) : isTranscribing ? (
-          <div className="flex items-center gap-2 py-2 px-1 text-xs text-[var(--color-text-muted)] font-sans">
+          <div className="flex items-center gap-2 py-2 px-1 text-xs text-[var(--color-muted)] font-sans">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-accent)]" />
             <span>Transcribing with local Whisper...</span>
           </div>
@@ -302,7 +302,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onClick={toggleMic}
               disabled={isLoading}
               title="Speak message (Whisper STT)"
-              className="p-2 rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition shrink-0 cursor-pointer disabled:opacity-40"
+              className="p-2 rounded-xl text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition shrink-0 cursor-pointer disabled:opacity-40"
             >
               <Mic className="w-4 h-4" />
             </button>
@@ -317,10 +317,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onBlur={() => setIsFocused(false)}
               placeholder="Ask anything, query your documents, or search the web..."
               rows={1}
-              className="flex-1 bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] text-sm font-sans leading-relaxed focus:outline-none resize-none max-h-44 py-1.5"
+              className="flex-1 bg-transparent text-[var(--color-text)] placeholder-[var(--color-muted)] text-sm font-sans leading-relaxed focus:outline-none resize-none max-h-44 py-1.5"
             />
 
-            {/* Send / Stop Button */}
+            {/* Send / Stop Button: Solid Accent Fill */}
             {isLoading ? (
               <button
                 onClick={onStopGeneration}
@@ -334,7 +334,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 onClick={handleSubmit}
                 disabled={!text.trim()}
                 title="Send message"
-                className="w-8 h-8 rounded-full bg-[var(--color-accent)] text-[var(--color-accent-fg)] flex items-center justify-center hover:opacity-90 transition disabled:opacity-20 disabled:cursor-not-allowed shrink-0 cursor-pointer"
+                className="w-8 h-8 rounded-full bg-[var(--color-accent)] text-[var(--color-accent-fg)] flex items-center justify-center hover:opacity-90 transition disabled:opacity-20 disabled:cursor-not-allowed shrink-0 cursor-pointer shadow-xs"
               >
                 <Send className="w-3.5 h-3.5" />
               </button>
@@ -350,8 +350,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onClick={() => onSearchModeChange('auto')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-sans transition cursor-pointer ${
                 searchMode === 'auto'
-                  ? 'bg-[var(--color-surface)] text-[var(--color-accent)] font-medium shadow-xs'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                  ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)] font-medium'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
               }`}
               title="Smart RAG: automatically searches documents or falls back to web"
             >
@@ -363,8 +363,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onClick={() => onSearchModeChange('web')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-sans transition cursor-pointer ${
                 searchMode === 'web'
-                  ? 'bg-[var(--color-surface)] text-[var(--color-accent)] font-medium shadow-xs'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                  ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)] font-medium'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
               }`}
               title="Force live web search"
             >
@@ -376,8 +376,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onClick={() => onSearchModeChange('docs')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-sans transition cursor-pointer ${
                 searchMode === 'docs'
-                  ? 'bg-[var(--color-surface)] text-[var(--color-accent)] font-medium shadow-xs'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                  ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)] font-medium'
+                  : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
               }`}
               title="Force query only uploaded documents"
             >
@@ -388,7 +388,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
           {/* Single muted Enter hint, visible on focus */}
           <div
-            className={`text-[10px] text-[var(--color-text-muted)] font-mono transition-opacity duration-150 ${
+            className={`text-[10px] text-[var(--color-muted)] font-mono transition-opacity duration-150 ${
               isFocused ? 'opacity-80' : 'opacity-0'
             }`}
           >

@@ -33,14 +33,39 @@ def is_datetime_query(query: str) -> bool:
             return True
     return False
 
+def is_casual_conversation(query: str) -> bool:
+    """
+    Identifies greetings, pleasantries, small talk, and direct capability queries.
+    These must be answered directly by the LLM with path "direct", not routed to web search.
+    """
+    q = query.lower().strip()
+    q_clean = re.sub(r'[^\w\s]', '', q).strip()
+
+    casual_patterns = [
+        r'^(hi|hello|hey|howdy|sup|yo|greetings|good\s+(morning|afternoon|evening|day|night))$',
+        r'^(how\s+are\s+you(\s+today)?|how\s+is\s+it\s+going|hows\s+it\s+going|whats\s+up|how\s+do\s+you\s+do)$',
+        r'^(thank\s+you|thanks(\s+a\s+lot)?|thx|much\s+appreciated|appreciate\s+it)$',
+        r'^(ready|are\s+you\s+ready|test|testing(\s+1\s+2\s+3)?|ping|can\s+you\s+hear\s+me)$',
+        r'^(who\s+are\s+you|what\s+can\s+you\s+do|what\s+are\s+your\s+capabilities|introduce\s+yourself)$',
+        r'^(bye|goodbye|see\s+you|have\s+a\s+good\s+day)$',
+        r'^(tell\s+me\s+a\s+joke|write\s+a\s+poem)$'
+    ]
+    return any(re.search(p, q_clean) for p in casual_patterns)
+
 def is_realtime_query(query: str) -> bool:
     """
-    Checks if the user query is asking for live/real-time info (news, current events, latest version, weather, etc.)
+    Checks if the user query is asking for live external info:
+    news, prices, weather, scores, or "latest/current/now" combined with a topic.
+    The bare word "today" alone does NOT trigger web search.
     """
     q = query.lower().strip()
     patterns = [
-        r'\b(latest|current|recently|recent|newest|today|yesterday|tomorrow|tonight|breaking news|live|stock price|weather|release date)\b',
-        r'\b(what is happening|what happened|latest version|who won|election)\b'
+        r'\b(news|weather|forecast|stock\s+price|crypto|bitcoin|election|score|sports|match\s+score)\b',
+        r'\b(latest\s+(version|release|update|news|model|phone|game|movie|patch|build))\b',
+        r'\b(current\s+(price|status|rate|events|president|ceo|champion|weather))\b',
+        r'\b(who\s+won|what\s+happened\s+(yesterday|today|recently))\b',
+        r'\b(release\s+date\s+(of|for)|when\s+is\s+.*(releasing|released))\b',
+        r'\b(what\s+is\s+happening\s+with|live\s+coverage)\b'
     ]
     return any(re.search(p, q) for p in patterns)
 
@@ -158,6 +183,30 @@ class RAGPipeline:
             time_resp = f"📅 **Today is {now.strftime('%A, %B %d, %Y')}**.\n\n⏰ The current local time is **{now.strftime('%I:%M:%S %p')}**."
             for word in time_resp.split(" "):
                 yield f"data: {json.dumps({'type': 'token', 'content': word + ' '})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        # Step 0b: Check for casual conversation / small talk (answered directly by LLM)
+        if search_mode == "auto" and is_casual_conversation(query):
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Thinking...'})}\n\n"
+            yield f"data: {json.dumps({
+                'type': 'sources',
+                'source_type': 'direct',
+                'path': 'direct',
+                'fallback_reason': None,
+                'best_score': None,
+                'threshold': self.threshold,
+                'sources': []
+            })}\n\n"
+
+            augmented_messages: List[Dict[str, str]] = []
+            if chat_history:
+                augmented_messages.extend(chat_history[-6:])
+            augmented_messages.append({"role": "user", "content": query})
+
+            system_prompt = SYSTEM_PROMPT_DIRECT.format(current_time=current_time_str)
+            async for token in llm_client.stream_chat(augmented_messages, system_prompt=system_prompt):
+                yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             return
 

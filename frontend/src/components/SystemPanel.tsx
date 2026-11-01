@@ -26,16 +26,17 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
   const hardware = health?.device_info?.device_name || 'Dynamic Hardware Detection';
   const vram = health?.device_info?.vram_gb ? `${health.device_info.vram_gb} GB` : 'System RAM';
   const isGpu = health?.device_info?.is_gpu ?? true;
+  const chunkCount = stats?.total_chunks ?? 0;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
         onClick={onClose}
       />
 
-      {/* Drawer */}
+      {/* Drawer using --color-surface */}
       <div className="relative w-84 max-w-full bg-[var(--color-surface)] border-l border-[var(--color-border)] p-6 flex flex-col justify-between shadow-2xl z-10 overflow-y-auto font-sans">
         <div>
           {/* Header */}
@@ -46,7 +47,7 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
             </h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition"
+              className="p-1 rounded-lg text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition cursor-pointer"
               title="Close panel"
             >
               <X className="w-4 h-4" />
@@ -56,12 +57,12 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
           <div className="mt-5 space-y-6 text-xs">
             {/* Compute & Hardware */}
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] mb-2">
                 Compute Engine
               </div>
               <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-text-muted)] flex items-center gap-1.5">
+                  <span className="text-[var(--color-muted)] flex items-center gap-1.5">
                     <Cpu className="w-3.5 h-3.5 text-[var(--color-accent)]" />
                     Device
                   </span>
@@ -70,11 +71,11 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-text-muted)]">Memory Allocation</span>
+                  <span className="text-[var(--color-muted)]">Memory Allocation</span>
                   <span className="font-mono text-[var(--color-text)] text-[11px]">{vram}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-text-muted)]">Acceleration</span>
+                  <span className="text-[var(--color-muted)]">Acceleration</span>
                   <span className="text-[11px] text-[var(--color-accent)] font-medium">
                     {isGpu ? 'NVIDIA CUDA (Active)' : 'CPU Direct'}
                   </span>
@@ -84,12 +85,12 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
 
             {/* Model & Embeddings */}
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] mb-2">
                 Language & Embeddings
               </div>
               <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-text-muted)] flex items-center gap-1.5">
+                  <span className="text-[var(--color-muted)] flex items-center gap-1.5">
                     <Radio className="w-3.5 h-3.5 text-[var(--color-accent)]" />
                     LLM Model
                   </span>
@@ -98,7 +99,7 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-text-muted)]">Embeddings</span>
+                  <span className="text-[var(--color-muted)]">Embeddings</span>
                   <span className="font-mono text-[var(--color-text)] text-[11px]">
                     {health?.embedding_model || 'bge-small-en-v1.5'}
                   </span>
@@ -108,21 +109,21 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
 
             {/* Vector Storage */}
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] mb-2">
                 Knowledge Stores
               </div>
               <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-text-muted)] flex items-center gap-1.5">
+                  <span className="text-[var(--color-muted)] flex items-center gap-1.5">
                     <Database className="w-3.5 h-3.5 text-[var(--color-accent)]" />
                     ChromaDB (Local)
                   </span>
                   <span className="font-mono text-[var(--color-text)] text-[11px]">
-                    {stats?.total_chunks ?? 0} Chunks
+                    {chunkCount} {chunkCount === 1 ? 'Chunk' : 'Chunks'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-text-muted)] flex items-center gap-1.5">
+                  <span className="text-[var(--color-muted)] flex items-center gap-1.5">
                     <Cloud className="w-3.5 h-3.5 text-[var(--color-accent)]" />
                     Pinecone (Cloud)
                   </span>
@@ -135,11 +136,11 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
 
             {/* Neural Voice Selector */}
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] mb-2">
                 Neural Voice (TTS)
               </div>
               <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] space-y-2">
-                <label className="text-[11px] text-[var(--color-text-muted)] flex items-center gap-1.5">
+                <label className="text-[11px] text-[var(--color-muted)] flex items-center gap-1.5">
                   <Volume2 className="w-3.5 h-3.5 text-[var(--color-accent)]" />
                   Select Voice
                 </label>
@@ -155,9 +156,9 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-[var(--color-text-muted)] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-3.5 h-3.5 text-[var(--color-muted)] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
-                <p className="text-[10px] text-[var(--color-text-muted)] leading-normal pt-1">
+                <p className="text-[10px] text-[var(--color-muted)] leading-normal pt-1">
                   Edge-TTS synthesis running asynchronously on CPU with 0 MB GPU overhead.
                 </p>
               </div>
@@ -165,15 +166,15 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
 
             {/* Architecture Note */}
             <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] mb-2">
                 Retrieval Pipeline
               </div>
-              <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-muted)] leading-relaxed space-y-1.5">
+              <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] text-[11px] text-[var(--color-muted)] leading-relaxed space-y-1.5">
                 <p>
                   <span className="text-[var(--color-text)] font-medium">Smart RAG:</span> Checks local ChromaDB cosine similarity threshold (0.45).
                 </p>
                 <p>
-                  <span className="text-[var(--color-warn)] font-medium">Fallback:</span> Automatically switches to live DuckDuckGo web search if document confidence is low or real-time info is needed.
+                  <span className="text-[var(--color-warn)] font-medium">Fallback:</span> Automatically switches to live DuckDuckGo web search if document confidence is low or real-time external info is needed.
                 </p>
               </div>
             </div>
@@ -181,7 +182,7 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="pt-6 border-t border-[var(--color-border)] flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
+        <div className="pt-6 border-t border-[var(--color-border)] flex items-center justify-between text-[11px] text-[var(--color-muted)]">
           <span className="flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-[var(--color-accent)]" />
             Local-First Private Execution
