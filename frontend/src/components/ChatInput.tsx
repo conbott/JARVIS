@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Mic, MicOff, Square, Globe, FileText, Sparkles } from 'lucide-react';
+import { Send, Mic, Square, Globe, FileText, Sparkles } from 'lucide-react';
 import type { HealthStatus, SearchMode } from '../types';
 
 interface ChatInputProps {
@@ -94,22 +94,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const modelDisplay = health?.llm_model || 'Local LLM';
-  const hardwareDisplay = health?.device_info?.device_name || 'Local System';
+  const hardwareDisplay = health?.device_info?.device_name || 'Hardware System';
 
   return (
-    <div className="border-t border-slate-800 bg-slate-900/90 backdrop-blur-md p-4">
-      {/* Search Mode Pills */}
-      <div className="max-w-4xl mx-auto flex items-center justify-between mb-2 px-1">
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+    <div className="border-t border-white/[0.06] bg-[#08090d]/80 backdrop-blur-xl p-4">
+      {/* Search Mode Pill Group */}
+      <div className="max-w-4xl mx-auto flex items-center justify-between mb-2.5 px-1">
+        <div className="flex items-center gap-1.5 bg-[#0e1017] p-1 rounded-xl border border-white/[0.06] text-xs shadow-inner">
           <button
             type="button"
             onClick={() => onSearchModeChange('auto')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition ${
               searchMode === 'auto'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
             }`}
-            title="Smart RAG: Query uploaded docs first, automatically fallback to Web Search if confidence is low"
+            title="Smart RAG: Checks uploaded documents first, falls back to Web Search if confidence is low"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Auto (Smart RAG)</span>
@@ -120,8 +120,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onClick={() => onSearchModeChange('web')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition ${
               searchMode === 'web'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
             }`}
             title="Force Live Web Search: Query DuckDuckGo directly for real-time live information"
           >
@@ -134,8 +134,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onClick={() => onSearchModeChange('docs')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition ${
               searchMode === 'docs'
-                ? 'bg-cyan-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                ? 'bg-cyan-600 text-white shadow-sm shadow-cyan-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
             }`}
             title="Documents Only: Restrict answers strictly to uploaded ChromaDB documents"
           >
@@ -144,28 +144,37 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </button>
         </div>
 
-        {/* Dynamic Hardware/Model Badge */}
-        <div className="hidden sm:flex items-center gap-2 text-[11px] text-slate-400">
-          <span className="flex items-center gap-1">
+        {/* Dynamic Model & Hardware Badge */}
+        <div className="hidden sm:flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/[0.03] border border-white/[0.05]">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="font-mono text-slate-300">{modelDisplay}</span>
+            <span className="text-slate-300">{modelDisplay}</span>
           </span>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto flex items-end gap-2 bg-slate-950 border border-slate-800 rounded-2xl p-2 shadow-lg focus-within:border-indigo-500/50 transition">
+      {/* Main Input Floating Bar */}
+      <div className="max-w-4xl mx-auto flex items-end gap-2 bg-[#0c0d14] border border-white/[0.08] focus-within:border-indigo-500/50 rounded-2xl p-2 shadow-2xl shadow-black/50 transition">
         {/* Push-to-Talk Mic Button */}
         <button
           onClick={toggleSpeech}
           disabled={isLoading}
           title={isListening ? 'Stop Listening' : 'Push-to-Talk (Mic Input -> Voice Output)'}
-          className={`p-2.5 rounded-xl transition shrink-0 ${
+          className={`p-2.5 rounded-xl transition shrink-0 relative ${
             isListening
-              ? 'bg-rose-500 text-white animate-pulse shadow-md shadow-rose-500/30'
-              : 'text-slate-400 hover:text-indigo-400 hover:bg-slate-900'
+              ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30 animate-pulse'
+              : 'text-slate-400 hover:text-indigo-400 hover:bg-white/[0.05]'
           }`}
         >
-          {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          {isListening ? (
+            <div className="flex items-center gap-1">
+              <span className="w-1 h-3 bg-white animate-bounce" />
+              <span className="w-1 h-4 bg-white animate-bounce [animation-delay:0.1s]" />
+              <span className="w-1 h-2 bg-white animate-bounce [animation-delay:0.2s]" />
+            </div>
+          ) : (
+            <Mic className="w-4 h-4" />
+          )}
         </button>
 
         {/* Text Area */}
@@ -179,7 +188,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             isListening
               ? 'Listening to your voice... (speak clearly)'
               : searchMode === 'web'
-              ? 'Search the live web with DuckDuckGo (e.g. latest news, stock prices, tech releases)...'
+              ? 'Search live internet data with DuckDuckGo (e.g. current releases, stock prices, news)...'
               : searchMode === 'docs'
               ? 'Ask questions strictly grounded in your uploaded documents...'
               : 'Ask anything, query uploaded documents, or search the live web...'
@@ -192,7 +201,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <button
             onClick={onStopGeneration}
             title="Stop generation"
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 transition shrink-0"
+            className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 text-amber-400 transition shrink-0"
           >
             <Square className="w-4 h-4 fill-amber-400" />
           </button>
@@ -203,8 +212,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             title="Send Message"
             className={`p-2.5 rounded-xl transition shrink-0 ${
               text.trim() && !isLoading
-                ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30'
-                : 'text-slate-600 bg-slate-900 cursor-not-allowed'
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-600 bg-white/[0.02] cursor-not-allowed'
             }`}
           >
             <Send className="w-4 h-4" />
@@ -213,10 +222,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </div>
 
       <div className="max-w-4xl mx-auto flex items-center justify-between text-[11px] text-slate-500 mt-2 px-2">
-        <span>Press <kbd className="bg-slate-800 text-slate-400 px-1 py-0.5 rounded">Enter</kbd> to send, <kbd className="bg-slate-800 text-slate-400 px-1 py-0.5 rounded">Shift+Enter</kbd> for new line</span>
-        <span className="flex items-center gap-1.5 text-slate-400 font-mono">
+        <span>
+          Press <kbd className="bg-white/[0.05] border border-white/[0.08] text-slate-300 px-1 py-0.5 rounded font-mono text-[10px]">Enter</kbd> to send, <kbd className="bg-white/[0.05] border border-white/[0.08] text-slate-300 px-1 py-0.5 rounded font-mono text-[10px]">Shift+Enter</kbd> for newline
+        </span>
+        <span className="flex items-center gap-1.5 text-slate-400 font-mono text-[10px]">
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-          <span>{modelDisplay} • {hardwareDisplay}</span>
+          <span>{hardwareDisplay}</span>
         </span>
       </div>
     </div>

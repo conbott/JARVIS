@@ -1,5 +1,7 @@
 import json
 import logging
+import re
+from datetime import datetime
 from typing import AsyncGenerator, List, Dict, Any, Optional
 from config import settings
 from core.vectorstore import vector_store_manager
@@ -8,41 +10,106 @@ from core.llm import llm_client
 
 logger = logging.getLogger(__name__)
 
+def get_current_system_context() -> str:
+    """
+    Returns the real-time local date, time, and day of week.
+    Prevents the LLM from hallucinating placeholders like [insert today's date].
+    """
+    now = datetime.now()
+    return now.strftime("%A, %B %d, %Y at %I:%M %p (Local System Time)")
+
+def is_datetime_query(query: str) -> bool:
+    """
+    Checks if the user is asking specifically about current date, day, or time.
+    """
+    q = query.lower().strip()
+    datetime_patterns = [
+        r'\b(what day is it|what is today|what\'s the date|current date|today\'s date|what time is it|current time|correct time)\b'
+    ]
+    for pattern in datetime_patterns:
+        if re.search(pattern, q):
+            return True
+    return False
+
 SYSTEM_PROMPT_DIRECT = """You are an advanced, intelligent Local RAG & Voice AI Assistant.
-You have the following core capabilities:
-1. Live Web Search: You can search the live web via DuckDuckGo in real time and cite your sources.
-2. Document Analysis (RAG): You can read, analyze, and query uploaded PDFs, TXT, and Markdown documents using ChromaDB and Pinecone.
-3. Neural Voice Assistant: You support push-to-talk voice input and natural neural speech output.
+System Knowledge & Environment:
+- Real-Time Clock: {current_time}
+- Hardware: Hardware-accelerated local execution with zero cloud telemetry.
+- Capabilities: Live Web Search (DuckDuckGo), Document RAG (ChromaDB + Pinecone), and Neural TTS Voice.
 
 Rules:
-- If asked about your capabilities (e.g. if you can search the web, read files, or speak), confirm enthusiastically with a clear 'Yes' and explain how the user can use them (including the Auto / Web / Docs mode toggles).
-- Respond in clean GitHub-flavored markdown with code highlighting when relevant.
-- Be concise, accurate, helpful, and direct.
+1. If the user asks for the current date, day, or time, answer directly and accurately using the Real-Time Clock provided above. Never use placeholder brackets like [insert date] or [insert time].
+2. If asked about your capabilities, confirm enthusiastically and explain your available features (Auto Smart RAG, Forced Web Search, Documents Only, and Push-to-Talk Voice).
+3. Format your answers in clean, professional GitHub-flavored markdown.
+4. Be concise, direct, helpful, and polite.
 """
 
 SYSTEM_PROMPT_RAG = """You are an advanced, intelligent AI Assistant with access to grounded context from uploaded documents.
-Your goal is to provide accurate, concise, and helpful answers based on the provided references.
+System Knowledge:
+- Real-Time Clock: {current_time}
 
 Rules:
 1. Prioritize the provided Grounded Context to answer questions.
-2. If citing information, clearly reference the source document and section.
+2. If citing information, clearly reference the source document and page/chunk.
 3. Use clean GitHub-flavored markdown with code formatting when sharing code.
 4. If the context does not fully answer the question, state what is known from the context and supplement with your general knowledge, stating the difference clearly.
 """
 
 SYSTEM_PROMPT_SEARCH = """You are an advanced, helpful AI Assistant equipped with live web search results.
-Synthesize the provided live web search results into a clean, comprehensive, up-to-date answer.
+System Knowledge:
+- Real-Time Clock: {current_time}
 
 Rules:
 1. Directly answer the user's question using the live web search sources.
 2. Include clickable markdown links to sources when relevant (e.g. [Source Title](URL)).
 3. Structure your response with clear headings or bullet points if explaining complex events or technical topics.
+4. If asked about the current date or time, reference the Real-Time Clock above.
 """
 
 class RAGPipeline:
     @property
     def threshold(self) -> float:
         return settings.SIMILARITY_SCORE_THRESHOLD
+
+    async def reformulate_query(self, query: str, chat_history: List[Dict[str, str]]) -> str:
+        """
+        Reformulates conversational queries with pronouns (e.g. 'what is its latest version')
+        into a standalone self-contained search query using recent conversation turns.
+        """
+        if not chat_history:
+            return query
+
+        # Fast check if query contains ambiguous pronouns or references
+        pronoun_pattern = r'\b(it|its|they|them|their|he|she|this|that|these|those|the game|the paper|the company|the tool)\b'
+        if not re.search(pronoun_pattern, query, flags=re.IGNORECASE):
+            return query
+
+        # Use LLM to resolve pronouns into standalone search query
+        recent_turns = chat_history[-4:]
+        history_text = "\n".join([f"{t['role'].capitalize()}: {t['content']}" for t in recent_turns])
+
+        prompt = (
+            f"Given the conversation history and the latest user question, rephrase the user question "
+            f"into a single, self-contained search query that replaces pronouns ('it', 'its', 'that') with "
+            f"the actual entity name mentioned in the history.\n"
+            f"Output ONLY the standalone rephrased search query. Do not add quotes, explanations, or punctuation at the start.\n\n"
+            f"Conversation History:\n{history_text}\n\n"
+            f"User Question: {query}\n"
+            f"Standalone Query:"
+        )
+
+        try:
+            rephrased = ""
+            async for token in llm_client.stream_chat([{"role": "user", "content": prompt}]):
+                rephrased += token
+            rephrased = rephrased.strip().strip('"').strip("'")
+            if rephrased and len(rephrased) > 3 and not rephrased.startswith("Given"):
+                logger.info(f"Query reformulated: '{query}' -> '{rephrased}'")
+                return rephrased
+        except Exception as e:
+            logger.warning(f"Query reformulation error: {e}")
+
+        return query
 
     async def stream_query(
         self,
@@ -52,42 +119,56 @@ class RAGPipeline:
     ) -> AsyncGenerator[str, None]:
         """
         Processes user query through the Dual RAG + Web Search pipeline.
-        search_mode options:
-        - 'auto': Checks uploaded docs first; falls back to web search if below threshold.
-        - 'web': Force live DuckDuckGo web search.
-        - 'docs': Force ChromaDB document retrieval only.
-        
         Yields Server-Sent Events (SSE) format strings:
-        - metadata with sources
-        - individual response tokens
-        - done signal
+        - status: Live visual pipeline steps (e.g. 'Searching web...', 'Reading documents...')
+        - sources: Metadata with sources list
+        - token: Individual streamed tokens
+        - done: Completion signal
         """
         chat_history = chat_history or []
+        current_time_str = get_current_system_context()
+
+        # Step 0: Check for direct Date/Time question
+        if is_datetime_query(query):
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Checking system clock...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'sources', 'source_type': 'direct', 'sources': []})}\n\n"
+            
+            now = datetime.now()
+            time_resp = f"📅 **Today is {now.strftime('%A, %B %d, %Y')}**.\n\n⏰ The current local time is **{now.strftime('%I:%M:%S %p')}**."
+            for word in time_resp.split(" "):
+                yield f"data: {json.dumps({'type': 'token', 'content': word + ' '})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        # Step 1: Query Reformulation for Multi-turn conversation
+        standalone_query = query
+        if chat_history:
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Resolving conversation context...'})}\n\n"
+            standalone_query = await self.reformulate_query(query, chat_history)
+
         stats = vector_store_manager.get_stats()
         total_chunks = stats.get("total_chunks", 0)
 
         sources: List[Dict[str, Any]] = []
         source_type = "direct"
         context_text = ""
-        system_prompt = SYSTEM_PROMPT_DIRECT
+        system_prompt = SYSTEM_PROMPT_DIRECT.format(current_time=current_time_str)
 
         # MODE: Forced Web Search
         if search_mode == "web":
-            logger.info(f"[Mode: Web] Forcing live DuckDuckGo web search for query: '{query}'")
-            search_results = web_search_engine.search(query)
+            yield f"data: {json.dumps({'type': 'status', 'message': f'Searching the web for: \"{standalone_query}\"...'})}\n\n"
+            search_results = web_search_engine.search(standalone_query)
             if search_results:
                 source_type = "web"
                 context_text = web_search_engine.format_search_context(search_results)
                 sources = search_results
-                system_prompt = SYSTEM_PROMPT_SEARCH
-            else:
-                logger.info("Forced web search returned no results, continuing with direct LLM.")
+                system_prompt = SYSTEM_PROMPT_SEARCH.format(current_time=current_time_str)
 
         # MODE: Forced Documents Only
         elif search_mode == "docs":
-            logger.info(f"[Mode: Docs] Querying ChromaDB documents for query: '{query}'")
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Searching uploaded documents in ChromaDB...'})}\n\n"
             if total_chunks > 0:
-                doc_results = vector_store_manager.search_with_scores(query, k=settings.SIMILARITY_K)
+                doc_results = vector_store_manager.search_with_scores(standalone_query, k=settings.SIMILARITY_K)
                 if doc_results:
                     source_type = "document"
                     context_blocks = []
@@ -97,18 +178,18 @@ class RAGPipeline:
                         context_blocks.append(f"--- Document: {src_name} (Page/Chunk: {page}) ---\n{doc.page_content}")
                         sources.append({
                             "title": f"{src_name} (Page {page})",
-                            "snippet": doc.page_content[:200] + "...",
+                            "snippet": doc.page_content[:250] + "...",
                             "source_type": "document",
                             "score": round(score, 3)
                         })
                     context_text = "\n\n".join(context_blocks)
-                    system_prompt = SYSTEM_PROMPT_RAG
+                    system_prompt = SYSTEM_PROMPT_RAG.format(current_time=current_time_str)
 
         # MODE: Auto (Smart RAG + Fallback)
         else:
-            # Step 1: Check Local ChromaDB if documents exist
             if total_chunks > 0:
-                doc_results = vector_store_manager.search_with_scores(query, k=settings.SIMILARITY_K)
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Checking uploaded documents...'})}\n\n"
+                doc_results = vector_store_manager.search_with_scores(standalone_query, k=settings.SIMILARITY_K)
                 if doc_results:
                     best_score = max([score for _, score in doc_results])
                     logger.info(f"ChromaDB search best score: {best_score:.4f} (Threshold: {self.threshold})")
@@ -122,25 +203,24 @@ class RAGPipeline:
                             context_blocks.append(f"--- Document: {src_name} (Page/Chunk: {page}) ---\n{doc.page_content}")
                             sources.append({
                                 "title": f"{src_name} (Page {page})",
-                                "snippet": doc.page_content[:200] + "...",
+                                "snippet": doc.page_content[:250] + "...",
                                 "source_type": "document",
                                 "score": round(score, 3)
                             })
                         context_text = "\n\n".join(context_blocks)
-                        system_prompt = SYSTEM_PROMPT_RAG
+                        system_prompt = SYSTEM_PROMPT_RAG.format(current_time=current_time_str)
 
-            # Step 2: Fallback to Autonomous DuckDuckGo Search if no document match
+            # Fallback to Live DuckDuckGo Web Search if no document match
             if source_type != "document":
-                # Check if it's an informational query or if user asked for real-time data
-                logger.info(f"Auto-fallback: Initiating DuckDuckGo search for: '{query}'")
-                search_results = web_search_engine.search(query)
+                yield f"data: {json.dumps({'type': 'status', 'message': f'Searching live web for: \"{standalone_query}\"...'})}\n\n"
+                search_results = web_search_engine.search(standalone_query)
                 if search_results:
                     source_type = "web"
                     context_text = web_search_engine.format_search_context(search_results)
                     sources = search_results
-                    system_prompt = SYSTEM_PROMPT_SEARCH
+                    system_prompt = SYSTEM_PROMPT_SEARCH.format(current_time=current_time_str)
 
-        # Step 3: Yield Sources Metadata Event
+        # Yield Sources Metadata Event
         init_event = {
             "type": "sources",
             "source_type": source_type,
@@ -148,7 +228,7 @@ class RAGPipeline:
         }
         yield f"data: {json.dumps(init_event)}\n\n"
 
-        # Step 4: Construct Prompt with Context
+        # Construct Prompt with Context
         augmented_messages: List[Dict[str, str]] = []
         if chat_history:
             augmented_messages.extend(chat_history[-6:])
@@ -160,7 +240,9 @@ class RAGPipeline:
 
         augmented_messages.append({"role": "user", "content": augmented_query})
 
-        # Step 5: Stream Tokens from Local Ollama
+        yield f"data: {json.dumps({'type': 'status', 'message': 'Generating response...'})}\n\n"
+
+        # Stream Tokens from Local Ollama
         async for token in llm_client.stream_chat(augmented_messages, system_prompt=system_prompt):
             token_event = {
                 "type": "token",
@@ -168,7 +250,7 @@ class RAGPipeline:
             }
             yield f"data: {json.dumps(token_event)}\n\n"
 
-        # Step 6: Stream Done Signal
+        # Done Signal
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 rag_pipeline = RAGPipeline()

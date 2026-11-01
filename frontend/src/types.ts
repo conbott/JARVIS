@@ -14,6 +14,14 @@ export interface ChatMessage {
   sources?: SourceItem[];
   audioUrl?: string;
   timestamp: string;
+  statusMessage?: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  messages: ChatMessage[];
 }
 
 export interface DocumentStats {
