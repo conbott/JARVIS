@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { ChatMessageItem } from './components/ChatMessageItem';
 import { ChatInput } from './components/ChatInput';
 import { DocumentDrawer } from './components/DocumentDrawer';
+import { SystemPanel } from './components/SystemPanel';
 import { ThinkingStatus } from './components/ThinkingStatus';
 import type {
   ChatMessage,
@@ -14,7 +15,7 @@ import type {
   SearchMode,
   VoiceOption,
 } from './types';
-import { Sparkles, FileText, Globe, Volume2 } from 'lucide-react';
+import { UploadCloud, ArrowUpRight } from 'lucide-react';
 
 export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
@@ -40,6 +41,7 @@ export default function App() {
   const [liveStatus, setLiveStatus] = useState<string>('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isSystemOpen, setIsSystemOpen] = useState(false);
   const [stats, setStats] = useState<DocumentStats | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [searchMode, setSearchMode] = useState<SearchMode>('auto');
@@ -88,27 +90,17 @@ export default function App() {
     }
   }, [activeSessionId]);
 
-  // Auto-scroll to bottom of chat
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // Auto-scroll to bottom of conversation
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, liveStatus]);
 
-  // Fetch initial system health & document stats
-  const fetchStats = async () => {
-    try {
-      const res = await fetch('/api/documents/stats');
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
-    } catch (e) {
-      console.error('Error fetching document stats:', e);
-    }
-  };
+  // Fetch system health & document stats on initial mount
+  useEffect(() => {
+    fetchHealth();
+    fetchStats();
+    fetchVoices();
+  }, []);
 
   const fetchHealth = async () => {
     try {
@@ -117,8 +109,20 @@ export default function App() {
         const data = await res.json();
         setHealth(data);
       }
-    } catch (e) {
-      console.error('Error fetching system health:', e);
+    } catch (err) {
+      console.error('Failed to fetch system health:', err);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/documents/stats');
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch document stats:', err);
     }
   };
 
@@ -129,30 +133,16 @@ export default function App() {
         const data = await res.json();
         setAvailableVoices(data.voices || []);
       }
-    } catch (e) {
-      console.error('Error fetching voices:', e);
+    } catch (err) {
+      console.error('Failed to fetch voices:', err);
     }
   };
 
-  useEffect(() => {
-    fetchHealth();
-    fetchStats();
-    fetchVoices();
-    const interval = setInterval(fetchHealth, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Voice Selection Handler
   const handleSelectVoice = (voiceId: string) => {
     setSelectedVoice(voiceId);
-    try {
-      localStorage.setItem('rag_assistant_voice', voiceId);
-    } catch (e) {
-      console.error('Error saving selected voice:', e);
-    }
+    localStorage.setItem('rag_assistant_voice', voiceId);
   };
 
-  // Global Audio Controller (prevents overlapping and supports pausing/stopping)
   const stopActiveAudio = () => {
     if (audioInstanceRef.current) {
       audioInstanceRef.current.pause();
@@ -180,16 +170,13 @@ export default function App() {
   };
 
   const handleTogglePlayAudio = async (messageId: string, text: string) => {
-    // If currently playing this specific message, clicking it stops the playback!
     if (playingMessageId === messageId) {
       stopActiveAudio();
       return;
     }
 
-    // Stop any previously playing audio track immediately
     stopActiveAudio();
 
-    // Check if the message already has an audio object URL cached
     const targetMsg = messages.find((m) => m.id === messageId);
     let url = targetMsg?.audioUrl;
 
@@ -236,7 +223,7 @@ export default function App() {
     stopActiveAudio();
     const newSession: ChatSession = {
       id: Date.now().toString(),
-      title: 'New Conversation',
+      title: 'New conversation',
       createdAt: new Date().toISOString(),
       messages: [],
     };
@@ -248,11 +235,12 @@ export default function App() {
   const handleDeleteSession = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     stopActiveAudio();
-    setSessions((prev) => prev.filter((s) => s.id !== id));
+    const filtered = sessions.filter((s) => s.id !== id);
+    setSessions(filtered);
     if (activeSessionId === id) {
-      const remaining = sessions.filter((s) => s.id !== id);
-      if (remaining.length > 0) {
-        setActiveSessionId(remaining[0].id);
+      if (filtered.length > 0) {
+        setActiveSessionId(filtered[0].id);
+        setMessages(filtered[0].messages);
       } else {
         setActiveSessionId('');
         setMessages([]);
@@ -261,14 +249,12 @@ export default function App() {
   };
 
   const handleClearChat = () => {
-    if (messages.length === 0 || confirm('Clear this conversation?')) {
-      stopActiveAudio();
-      setMessages([]);
-      if (activeSessionId) {
-        setSessions((prev) =>
-          prev.map((s) => (s.id === activeSessionId ? { ...s, messages: [] } : s))
-        );
-      }
+    stopActiveAudio();
+    setMessages([]);
+    if (activeSessionId) {
+      setSessions((prev) =>
+        prev.map((s) => (s.id === activeSessionId ? { ...s, messages: [] } : s))
+      );
     }
   };
 
@@ -284,7 +270,6 @@ export default function App() {
   const handleSendMessage = async (text: string, isVoice: boolean, forcedMode?: SearchMode) => {
     if (!text.trim() || isLoading) return;
 
-    // Stop active audio when sending a new message
     stopActiveAudio();
 
     const activeMode = forcedMode || searchMode;
@@ -307,9 +292,8 @@ export default function App() {
     const nextMessages = [...messages, userMessage, initialAssistantMessage];
     setMessages(nextMessages);
     setIsLoading(true);
-    setLiveStatus('Preparing request...');
+    setLiveStatus('Thinking...');
 
-    // If no active session, create one
     let currentId = activeSessionId;
     if (!currentId) {
       const newSession: ChatSession = {
@@ -327,7 +311,7 @@ export default function App() {
           s.id === currentId
             ? {
                 ...s,
-                title: s.title === 'New Conversation' ? text.slice(0, 32) : s.title,
+                title: s.title === 'New conversation' ? text.slice(0, 32) : s.title,
                 messages: nextMessages,
               }
             : s
@@ -397,7 +381,7 @@ export default function App() {
                   return updated;
                 });
               } else if (eventData.type === 'token') {
-                setLiveStatus(''); // Clear thinking once streaming begins
+                setLiveStatus('');
                 fullGeneratedContent += eventData.content;
                 setMessages((prev) => {
                   const updated = prev.map((m) =>
@@ -430,7 +414,7 @@ export default function App() {
         )
       );
 
-      // If Push-to-Talk voice used: auto-synthesize and play
+      // RULE 1: If message was sent via push-to-talk mic (isVoice = true), auto-play assistant's reply
       if (isVoice && fullGeneratedContent.trim()) {
         stopActiveAudio();
         const voiceUrl = await handleSynthesizeVoice(fullGeneratedContent, selectedVoice);
@@ -469,7 +453,7 @@ export default function App() {
             m.id === assistantMsgId
               ? {
                   ...m,
-                  content: `⚠️ **Error generating response:** ${error.message || 'Unknown network error'}. Please verify backend connection.`,
+                  content: `⚠️ **Error generating response:** ${error.message || 'Unknown network error'}.`,
                 }
               : m
           )
@@ -482,14 +466,15 @@ export default function App() {
     }
   };
 
-  const modelLabel = health?.llm_model || 'Local LLM';
-  const hardwareLabel = health?.device_info?.device_name || 'Hardware Accelerated System';
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   return (
-    <div className="flex h-screen bg-[#07080c] text-slate-100 overflow-hidden font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* Background Ambient Glow */}
-      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(ellipse_80%_40%_at_50%_-10%,_var(--tw-gradient-stops))] from-indigo-900/15 via-transparent to-transparent" />
-
+    <div className="flex h-screen bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden font-sans select-text selection:bg-[var(--color-accent)]/20 selection:text-[var(--color-text)]">
       {/* Collapsible Session Sidebar */}
       <Sidebar
         isOpen={isSidebarOpen}
@@ -500,12 +485,11 @@ export default function App() {
         onNewSession={handleNewSession}
         onDeleteSession={handleDeleteSession}
         health={health}
-        stats={stats}
       />
 
       {/* Main Chat Workspace */}
-      <div className="flex-1 flex flex-col h-full z-10 relative overflow-hidden">
-        {/* Top Header */}
+      <div className="flex-1 flex flex-col h-full z-10 relative overflow-hidden bg-[var(--color-bg)]">
+        {/* Slim Top Header */}
         <Header
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -513,87 +497,82 @@ export default function App() {
           stats={stats}
           onOpenDrawer={() => setIsDrawerOpen(true)}
           onClearChat={handleClearChat}
-          selectedVoice={selectedVoice}
-          onSelectVoice={handleSelectVoice}
-          availableVoices={availableVoices}
           isPlayingAudio={playingMessageId !== null}
           onStopAudio={stopActiveAudio}
+          onOpenSystem={() => setIsSystemOpen(true)}
         />
 
-        {/* Messages Stream */}
+        {/* Messages Stream - Centered column max-w ~720px */}
         <main className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-2xl mx-auto">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 flex items-center justify-center shadow-xl shadow-indigo-600/30 mb-5">
-                <Sparkles className="w-7 h-7 text-white" />
-              </div>
-
-              <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">
-                Studio-Grade Local RAG & Voice AI
+            <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-[720px] mx-auto w-full">
+              {/* Short serif greeting */}
+              <h2 className="font-serif text-3xl font-medium text-[var(--color-text)] mb-2 tracking-tight">
+                {getGreeting()}
               </h2>
-              <p className="text-sm text-slate-400 mb-8 max-w-md leading-relaxed">
-                Powered by <span className="text-indigo-400 font-semibold">{modelLabel}</span> running on{' '}
-                <span className="text-purple-400 font-semibold">{hardwareLabel}</span> with live web citations.
+              <p className="text-sm font-sans text-[var(--color-text-muted)] mb-8">
+                How can I assist you with your documents or research today?
               </p>
 
-              {/* Quick Starters */}
+              {/* 3 Suggested Prompts as small cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full text-left">
                 <button
                   onClick={() =>
-                    handleSendMessage('What is Pokemon Fire Ash, and what is its latest release?', false, 'auto')
+                    handleSendMessage('Summarize the key findings from my uploaded documents.', false, 'docs')
                   }
-                  className="p-3.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-indigo-500/30 transition group shadow-sm"
+                  className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] transition text-left cursor-pointer group"
                 >
-                  <div className="flex items-center space-x-2 text-indigo-400 font-semibold text-xs mb-1">
-                    <Sparkles className="w-4 h-4" />
-                    <span>Pokemon Fire Ash</span>
+                  <div className="flex items-center justify-between text-xs text-[var(--color-text)] font-medium mb-1">
+                    <span>Summarize documents</span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] transition" />
                   </div>
-                  <p className="text-xs text-slate-400">
-                    Test multi-turn conversational query reformulation & web search.
+                  <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                    Query local ChromaDB vectors for document summaries.
                   </p>
                 </button>
 
                 <button
-                  onClick={() => setIsDrawerOpen(true)}
-                  className="p-3.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-cyan-500/30 transition group shadow-sm"
+                  onClick={() =>
+                    handleSendMessage('What are the key technical points and takeaways?', false, 'auto')
+                  }
+                  className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] transition text-left cursor-pointer group"
                 >
-                  <div className="flex items-center space-x-2 text-cyan-400 font-semibold text-xs mb-1">
-                    <FileText className="w-4 h-4" />
-                    <span>Document Analysis</span>
+                  <div className="flex items-center justify-between text-xs text-[var(--color-text)] font-medium mb-1">
+                    <span>Key takeaways</span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] transition" />
                   </div>
-                  <p className="text-xs text-slate-400">
-                    Upload PDFs or TXT files to query them locally with ChromaDB.
+                  <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                    Extract structured bullet points and insights.
                   </p>
                 </button>
 
                 <button
-                  onClick={() => {
-                    setSearchMode('web');
-                    handleSendMessage('What is the current date and time today?', false, 'auto');
-                  }}
-                  className="p-3.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:border-emerald-500/30 transition group shadow-sm"
+                  onClick={() =>
+                    handleSendMessage('Search the web for the latest updates on this topic.', false, 'web')
+                  }
+                  className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] transition text-left cursor-pointer group"
                 >
-                  <div className="flex items-center space-x-2 text-emerald-400 font-semibold text-xs mb-1">
-                    <Globe className="w-4 h-4" />
-                    <span>Live Clock & Info</span>
+                  <div className="flex items-center justify-between text-xs text-[var(--color-text)] font-medium mb-1">
+                    <span>Search the web</span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] transition" />
                   </div>
-                  <p className="text-xs text-slate-400">
-                    Zero hallucinations: grounded real-time system clock.
+                  <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                    Fetch live web information via DuckDuckGo.
                   </p>
                 </button>
               </div>
 
-              <div className="mt-8 flex items-center space-x-4 text-xs text-slate-500 font-mono">
-                <span className="flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Push-to-Talk Voice</span>
-                </span>
-                <span>•</span>
-                <span>Dual Chroma & Pinecone</span>
-              </div>
+              {/* Dashed upload hint */}
+              <button
+                onClick={() => setIsDrawerOpen(true)}
+                className="w-full mt-6 border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)]/50 rounded-xl p-3.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <UploadCloud className="w-4 h-4 text-[var(--color-accent)]" />
+                <span>Drop documents or click to open knowledge drawer</span>
+              </button>
             </div>
           ) : (
-            <div className="divide-y divide-white/[0.02]">
+            <div className="max-w-[720px] mx-auto w-full py-6 space-y-6">
               {messages.map((msg) => (
                 <ChatMessageItem
                   key={msg.id}
@@ -604,9 +583,9 @@ export default function App() {
                 />
               ))}
 
-              {/* Live Thinking Status */}
+              {/* Calm Inline Thinking Status */}
               {isLoading && liveStatus && (
-                <div className="py-4 px-4 md:px-8">
+                <div className="py-2">
                   <ThinkingStatus statusMessage={liveStatus} searchMode={searchMode} />
                 </div>
               )}
@@ -616,16 +595,18 @@ export default function App() {
           )}
         </main>
 
-        {/* Bottom Chat Input */}
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          isLoading={isLoading}
-          onStopGeneration={handleStopGeneration}
-          searchMode={searchMode}
-          onSearchModeChange={setSearchMode}
-          health={health}
-          onStopAudio={stopActiveAudio}
-        />
+        {/* Bottom Chat Input (Centered 720px) */}
+        <div className="pb-4 pt-1 bg-[var(--color-bg)]">
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            isLoading={isLoading}
+            onStopGeneration={handleStopGeneration}
+            searchMode={searchMode}
+            onSearchModeChange={setSearchMode}
+            onStopAudio={stopActiveAudio}
+            stats={stats}
+          />
+        </div>
 
         {/* Slide-out Document Drawer */}
         <DocumentDrawer
@@ -633,6 +614,17 @@ export default function App() {
           onClose={() => setIsDrawerOpen(false)}
           stats={stats}
           onRefreshStats={fetchStats}
+        />
+
+        {/* Slide-out System Panel */}
+        <SystemPanel
+          isOpen={isSystemOpen}
+          onClose={() => setIsSystemOpen(false)}
+          health={health}
+          stats={stats}
+          selectedVoice={selectedVoice}
+          onSelectVoice={handleSelectVoice}
+          availableVoices={availableVoices}
         />
       </div>
     </div>

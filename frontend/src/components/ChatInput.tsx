@@ -1,6 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Mic, Square, Globe, FileText, Sparkles, X, Check, Loader2 } from 'lucide-react';
-import type { HealthStatus, SearchMode } from '../types';
+import {
+  Send,
+  Mic,
+  Square,
+  Globe,
+  FileText,
+  Sparkles,
+  X,
+  Check,
+  Loader2,
+} from 'lucide-react';
+import type { SearchMode, DocumentStats } from '../types';
 
 interface ChatInputProps {
   onSendMessage: (text: string, isVoice: boolean) => void;
@@ -8,8 +18,8 @@ interface ChatInputProps {
   onStopGeneration?: () => void;
   searchMode: SearchMode;
   onSearchModeChange: (mode: SearchMode) => void;
-  health: HealthStatus | null;
   onStopAudio?: () => void;
+  stats?: DocumentStats | null;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -18,13 +28,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onStopGeneration,
   searchMode,
   onSearchModeChange,
-  health,
   onStopAudio,
+  stats,
 }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -43,7 +54,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, []);
 
   const startRecording = async () => {
-    // If any audio response is currently playing, stop it so it doesn't leak into the mic
     if (onStopAudio) {
       onStopAudio();
     }
@@ -53,7 +63,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStreamRef.current = stream;
 
-      // Determine best supported mime type
       const mimeType = [
         'audio/webm;codecs=opus',
         'audio/webm',
@@ -74,7 +83,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       };
 
       recorder.onstop = async () => {
-        // Clean up mic track stream
         if (audioStreamRef.current) {
           audioStreamRef.current.getTracks().forEach((t) => t.stop());
           audioStreamRef.current = null;
@@ -83,7 +91,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         const mime = recorder.mimeType || 'audio/webm';
         const audioBlob = new Blob(audioChunksRef.current, { type: mime });
 
-        // If audio blob is tiny (< 1000 bytes, likely just click noise), skip
         if (audioBlob.size < 1000) {
           setIsRecording(false);
           return;
@@ -102,7 +109,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     } catch (err: any) {
       console.error('Microphone access error:', err);
       alert(
-        'Could not access microphone. Please ensure microphone permissions are granted in your browser settings (Opera GX / Chrome / Edge).'
+        'Could not access microphone. Please ensure microphone permissions are granted in your browser settings.'
       );
       setIsRecording(false);
     }
@@ -160,6 +167,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
       const data = await res.json();
       if (data.text && data.text.trim()) {
+        // Send message with isVoice = true so response auto-plays
         onSendMessage(data.text.trim(), true);
       } else {
         console.warn('Whisper STT: No speech detected.');
@@ -201,7 +209,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  // Auto-resize textarea
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
     e.target.style.height = 'auto';
@@ -214,187 +221,180 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const modelDisplay = health?.llm_model || 'Local LLM';
-  const hardwareDisplay = health?.device_info?.device_name || 'Hardware System';
+  const docCount = stats?.document_count ?? 0;
+  const chunkCount = stats?.total_chunks ?? 0;
 
   return (
-    <div className="border-t border-white/[0.06] bg-[#08090d]/80 backdrop-blur-xl p-4">
-      {/* Search Mode Pill Group */}
-      <div className="max-w-4xl mx-auto flex items-center justify-between mb-2.5 px-1">
-        <div className="flex items-center gap-1.5 bg-[#0e1017] p-1 rounded-xl border border-white/[0.06] text-xs shadow-inner">
-          <button
-            type="button"
-            onClick={() => onSearchModeChange('auto')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition ${
-              searchMode === 'auto'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
-            }`}
-            title="Smart RAG: Checks uploaded documents first, falls back to Web Search if confidence is low"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Auto (Smart RAG)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onSearchModeChange('web')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition ${
-              searchMode === 'web'
-                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
-            }`}
-            title="Force Live Web Search: Query DuckDuckGo directly for real-time live information"
-          >
-            <Globe className="w-3.5 h-3.5" />
-            <span>Live Web Search</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onSearchModeChange('docs')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition ${
-              searchMode === 'docs'
-                ? 'bg-cyan-600 text-white shadow-sm shadow-cyan-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
-            }`}
-            title="Documents Only: Restrict answers strictly to uploaded ChromaDB documents"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Documents Only</span>
-          </button>
-        </div>
-
-        {/* Dynamic Model & Hardware Badge */}
-        <div className="hidden sm:flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/[0.03] border border-white/[0.05]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="text-slate-300">{modelDisplay}</span>
+    <div className="w-full max-w-[720px] mx-auto px-4 md:px-0">
+      {/* Attached Documents Chips */}
+      {docCount > 0 && stats?.documents && (
+        <div className="flex items-center gap-1.5 mb-2 overflow-x-auto py-1 text-xs text-[var(--color-text-muted)] font-sans">
+          <span className="text-[11px] shrink-0">Attached:</span>
+          {stats.documents.slice(0, 3).map((doc, idx) => (
+            <span
+              key={idx}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] text-[11px] font-mono text-[var(--color-text)] truncate max-w-[180px]"
+            >
+              <FileText className="w-2.5 h-2.5 text-[var(--color-accent)] shrink-0" />
+              <span className="truncate">{doc}</span>
+            </span>
+          ))}
+          {stats.documents.length > 3 && (
+            <span className="text-[10px] text-[var(--color-text-muted)] font-mono">
+              +{stats.documents.length - 3} more
+            </span>
+          )}
+          <span className="text-[10px] text-[var(--color-text-muted)] font-mono ml-auto shrink-0">
+            {chunkCount} chunks
           </span>
         </div>
-      </div>
+      )}
 
-      {/* Main Input Floating Bar */}
-      <div className="max-w-4xl mx-auto flex items-end gap-2 bg-[#0c0d14] border border-white/[0.08] focus-within:border-indigo-500/50 rounded-2xl p-2 shadow-2xl shadow-black/50 transition relative">
-        {/* Recording Overlay banner if recording or transcribing */}
-        {isRecording && (
-          <div className="absolute inset-x-2 top-2 bottom-2 bg-[#12141e] rounded-xl flex items-center justify-between px-3 border border-rose-500/30 z-20 shadow-xl">
-            <div className="flex items-center space-x-3">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500" />
-              </span>
-              <span className="text-xs font-semibold text-rose-300 font-mono">
-                Recording... {formatTime(recordingDuration)}
-              </span>
-              {/* Dynamic waveform visualizer bars */}
-              <div className="hidden sm:flex items-center space-x-0.5">
-                <span className="w-1 h-3 bg-rose-400 animate-pulse" />
-                <span className="w-1 h-5 bg-rose-400 animate-pulse delay-75" />
-                <span className="w-1 h-2 bg-rose-400 animate-pulse delay-150" />
-                <span className="w-1 h-6 bg-rose-400 animate-pulse delay-100" />
-                <span className="w-1 h-4 bg-rose-400 animate-pulse delay-200" />
+      {/* Main Floating Box */}
+      <div
+        className={`relative rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] p-3 transition-all shadow-sm ${
+          isFocused ? 'ring-1 ring-[var(--color-accent)]/50 border-[var(--color-border)]' : ''
+        }`}
+      >
+        {/* Recording Waveform State */}
+        {isRecording ? (
+          <div className="flex items-center justify-between py-2 px-1 text-sm font-sans">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 h-5">
+                <span className="w-1 h-3 bg-[var(--color-accent)] rounded-full animate-pulse" />
+                <span className="w-1 h-5 bg-[var(--color-accent)] rounded-full animate-pulse delay-75" />
+                <span className="w-1 h-2 bg-[var(--color-accent)] rounded-full animate-pulse delay-150" />
+                <span className="w-1 h-4 bg-[var(--color-accent)] rounded-full animate-pulse delay-200" />
               </div>
-              <span className="hidden md:inline text-[11px] text-slate-400">
-                (Click Stop or Check to transcribe with Whisper)
+              <span className="text-xs text-[var(--color-text)] font-medium">
+                Listening... ({formatTime(recordingDuration)})
               </span>
             </div>
 
-            <div className="flex items-center space-x-1.5">
+            <div className="flex items-center gap-2">
               <button
-                type="button"
                 onClick={cancelRecording}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition"
-                title="Discard audio"
+                className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition text-xs"
+                title="Cancel recording"
               >
                 <X className="w-4 h-4" />
               </button>
               <button
-                type="button"
                 onClick={stopRecording}
-                className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md shadow-rose-600/30 transition"
-                title="Done speaking, send to Whisper"
+                className="px-3 py-1 rounded-lg bg-[var(--color-accent)] text-[var(--color-accent-fg)] text-xs font-medium hover:opacity-90 transition flex items-center gap-1"
+                title="Finish recording and transcribe"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Send</span>
               </button>
             </div>
           </div>
-        )}
+        ) : isTranscribing ? (
+          <div className="flex items-center gap-2 py-2 px-1 text-xs text-[var(--color-text-muted)] font-sans">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-accent)]" />
+            <span>Transcribing with local Whisper...</span>
+          </div>
+        ) : (
+          /* Normal Textarea Row */
+          <div className="flex items-end gap-2">
+            {/* Mic Push-to-Talk Button */}
+            <button
+              onClick={toggleMic}
+              disabled={isLoading}
+              title="Speak message (Whisper STT)"
+              className="p-2 rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition shrink-0 cursor-pointer disabled:opacity-40"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
 
-        {isTranscribing && (
-          <div className="absolute inset-x-2 top-2 bottom-2 bg-[#12141e] rounded-xl flex items-center justify-center space-x-2.5 px-3 border border-indigo-500/30 z-20 shadow-xl">
-            <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
-            <span className="text-xs font-medium text-indigo-200">
-              Transcribing audio with faster-whisper (CPU INT8)...
-            </span>
+            {/* Auto-resizing Textarea */}
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              placeholder="Ask anything, query your documents, or search the web..."
+              rows={1}
+              className="flex-1 bg-transparent text-[var(--color-text)] placeholder-[var(--color-text-muted)] text-sm font-sans leading-relaxed focus:outline-none resize-none max-h-44 py-1.5"
+            />
+
+            {/* Send / Stop Button */}
+            {isLoading ? (
+              <button
+                onClick={onStopGeneration}
+                title="Stop generation"
+                className="w-8 h-8 rounded-full bg-[var(--color-surface-2)] text-[var(--color-text)] border border-[var(--color-border)] flex items-center justify-center hover:bg-[var(--color-surface)] transition shrink-0 cursor-pointer"
+              >
+                <Square className="w-3 h-3 fill-current" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={!text.trim()}
+                title="Send message"
+                className="w-8 h-8 rounded-full bg-[var(--color-accent)] text-[var(--color-accent-fg)] flex items-center justify-center hover:opacity-90 transition disabled:opacity-20 disabled:cursor-not-allowed shrink-0 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
 
-        {/* Push-to-Talk Mic Button */}
-        <button
-          onClick={toggleMic}
-          disabled={isLoading || isTranscribing}
-          title={isRecording ? 'Finish Speaking' : 'Push-to-Talk (Record Voice -> Whisper STT)'}
-          className={`p-2.5 rounded-xl transition shrink-0 relative ${
-            isRecording
-              ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
-              : 'text-slate-400 hover:text-indigo-400 hover:bg-white/[0.05]'
-          }`}
-        >
-          <Mic className="w-4 h-4" />
-        </button>
+        {/* Bottom Control Bar: Segmented Search Mode Control + Focus Hint */}
+        <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-[var(--color-border)]">
+          {/* Segmented Control */}
+          <div className="flex items-center p-0.5 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border)] text-xs">
+            <button
+              onClick={() => onSearchModeChange('auto')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-sans transition cursor-pointer ${
+                searchMode === 'auto'
+                  ? 'bg-[var(--color-surface)] text-[var(--color-accent)] font-medium shadow-xs'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              }`}
+              title="Smart RAG: automatically searches documents or falls back to web"
+            >
+              <Sparkles className="w-3 h-3" />
+              <span>Auto</span>
+            </button>
 
-        {/* Text Area */}
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          value={text}
-          onChange={handleInput}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            searchMode === 'web'
-              ? 'Search live internet data with DuckDuckGo (e.g. current releases, news, facts)...'
-              : searchMode === 'docs'
-              ? 'Ask questions strictly grounded in your uploaded documents...'
-              : 'Ask anything, query uploaded documents, or speak with push-to-talk mic...'
-          }
-          className="flex-1 bg-transparent border-0 text-sm text-slate-100 placeholder-slate-500 focus:ring-0 focus:outline-none resize-none py-2 px-1 max-h-44"
-        />
+            <button
+              onClick={() => onSearchModeChange('web')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-sans transition cursor-pointer ${
+                searchMode === 'web'
+                  ? 'bg-[var(--color-surface)] text-[var(--color-accent)] font-medium shadow-xs'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              }`}
+              title="Force live web search"
+            >
+              <Globe className="w-3 h-3" />
+              <span>Web</span>
+            </button>
 
-        {/* Send / Stop Action */}
-        {isLoading && onStopGeneration ? (
-          <button
-            onClick={onStopGeneration}
-            title="Stop generation"
-            className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 text-amber-400 transition shrink-0"
-          >
-            <Square className="w-4 h-4 fill-amber-400" />
-          </button>
-        ) : (
-          <button
-            onClick={handleSubmit}
-            disabled={!text.trim() || isLoading}
-            title="Send Message"
-            className={`p-2.5 rounded-xl transition shrink-0 ${
-              text.trim() && !isLoading
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-md shadow-indigo-600/30'
-                : 'text-slate-600 bg-white/[0.02] cursor-not-allowed'
+            <button
+              onClick={() => onSearchModeChange('docs')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-sans transition cursor-pointer ${
+                searchMode === 'docs'
+                  ? 'bg-[var(--color-surface)] text-[var(--color-accent)] font-medium shadow-xs'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              }`}
+              title="Force query only uploaded documents"
+            >
+              <FileText className="w-3 h-3" />
+              <span>Docs</span>
+            </button>
+          </div>
+
+          {/* Single muted Enter hint, visible on focus */}
+          <div
+            className={`text-[10px] text-[var(--color-text-muted)] font-mono transition-opacity duration-150 ${
+              isFocused ? 'opacity-80' : 'opacity-0'
             }`}
           >
-            <Send className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      <div className="max-w-4xl mx-auto flex items-center justify-between text-[11px] text-slate-500 mt-2 px-2">
-        <span>
-          Press <kbd className="bg-white/[0.05] border border-white/[0.08] text-slate-300 px-1 py-0.5 rounded font-mono text-[10px]">Enter</kbd> to send, <kbd className="bg-white/[0.05] border border-white/[0.08] text-slate-300 px-1 py-0.5 rounded font-mono text-[10px]">Shift+Enter</kbd> for newline
-        </span>
-        <span className="flex items-center gap-1.5 text-slate-400 font-mono text-[10px]">
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-          <span>{hardwareDisplay}</span>
-        </span>
+            Enter to send · Shift+Enter for new line
+          </div>
+        </div>
       </div>
     </div>
   );

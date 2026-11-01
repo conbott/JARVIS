@@ -27,6 +27,7 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
 }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>('idle');
   const [apiKey, setApiKey] = useState('');
   const [indexName, setIndexName] = useState('attention-paper');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -57,7 +58,7 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
 
       setFeedback({
         type: 'success',
-        text: `Indexed "${data.filename}" into ChromaDB (${data.chunks_added} chunks).`,
+        text: `Indexed "${data.filename}" (${data.chunks_added} chunks).`,
       });
       onRefreshStats();
     } catch (err: any) {
@@ -73,6 +74,7 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
 
   const handleSyncPinecone = async () => {
     setIsSyncing(true);
+    setSyncStatus('syncing');
     setFeedback(null);
 
     try {
@@ -90,11 +92,14 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
         throw new Error(data.detail || 'Pinecone sync failed');
       }
 
+      const count = data.synced_count ?? stats?.total_chunks ?? 0;
+      setSyncStatus(`synced ${count} vectors`);
       setFeedback({
         type: 'success',
-        text: data.message || `Successfully synced ${data.synced_count} vectors to Pinecone!`,
+        text: data.message || `Successfully synced ${count} vectors to Pinecone!`,
       });
     } catch (err: any) {
+      setSyncStatus('idle');
       setFeedback({
         type: 'error',
         text: err.message || 'Pinecone sync failed',
@@ -105,12 +110,13 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
   };
 
   const handleClearDocuments = async () => {
-    if (!confirm('Are you sure you want to clear all local documents from ChromaDB?')) return;
+    if (!confirm('Clear all uploaded documents from ChromaDB?')) return;
 
     try {
       const res = await fetch('/api/documents/clear', { method: 'DELETE' });
       if (res.ok) {
-        setFeedback({ type: 'success', text: 'Local ChromaDB collection cleared.' });
+        setFeedback({ type: 'success', text: 'Document store cleared.' });
+        setSyncStatus('idle');
         onRefreshStats();
       }
     } catch (err: any) {
@@ -118,183 +124,177 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
     }
   };
 
+  const documents = stats?.documents || [];
+  const totalChunks = stats?.total_chunks ?? 0;
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm transition-opacity">
-      <div className="w-full max-w-md bg-slate-900 border-l border-slate-800 h-full flex flex-col shadow-2xl p-6 overflow-y-auto">
-        {/* Drawer Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
-              <FileText className="w-4 h-4" />
-            </div>
-            <h2 className="text-base font-bold text-white">Knowledge Base & Sync</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+        onClick={onClose}
+      />
 
-        {/* Feedback Alert */}
-        {feedback && (
-          <div
-            className={`mt-4 p-3 rounded-xl border flex items-start gap-2.5 text-xs ${
-              feedback.type === 'success'
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
-                : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
-            }`}
-          >
-            {feedback.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-            )}
-            <p className="leading-relaxed">{feedback.text}</p>
-          </div>
-        )}
-
-        {/* Section 1: Upload Documents to Local ChromaDB */}
-        <div className="mt-6">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-            1. Ingest Documents (Local ChromaDB)
-          </h3>
-
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-2xl p-6 text-center cursor-pointer transition bg-slate-950/40 hover:bg-slate-950/70 group"
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.txt,.md"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            {isUploading ? (
-              <div className="flex flex-col items-center justify-center py-2 space-y-2">
-                <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-                <span className="text-xs text-slate-300 font-medium">Extracting & Embedding Chunks...</span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center space-y-2">
-                <div className="w-12 h-12 rounded-full bg-indigo-500/10 group-hover:bg-indigo-500/20 text-indigo-400 flex items-center justify-center transition">
-                  <UploadCloud className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-200">
-                    Click or drag PDF / TXT / MD
-                  </p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Chunked & stored offline in local ChromaDB
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Section 2: Indexed Documents List */}
-        <div className="mt-6 flex-1">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Indexed Files ({stats?.document_count ?? 0})
-            </h3>
+      {/* Drawer */}
+      <div className="relative w-96 max-w-full bg-[var(--color-surface)] border-l border-[var(--color-border)] p-6 flex flex-col justify-between shadow-2xl z-10 overflow-y-auto font-sans">
+        <div>
+          {/* Header */}
+          <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border)]">
+            <h2 className="text-sm font-semibold text-[var(--color-text)] flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[var(--color-accent)]" />
+              <span>Documents & Knowledge Store</span>
+            </h2>
             <button
-              onClick={onRefreshStats}
-              title="Refresh"
-              className="text-slate-500 hover:text-slate-300 transition"
+              onClick={onClose}
+              className="p-1 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition"
+              title="Close drawer"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="bg-slate-950 rounded-xl border border-slate-800 p-3 max-h-48 overflow-y-auto space-y-1.5">
-            {stats && stats.documents.length > 0 ? (
-              stats.documents.map((doc, i) => (
-                <div
-                  key={i}
-                  className="flex items-center space-x-2 text-xs text-slate-300 py-1 px-2 rounded hover:bg-slate-900 transition"
-                >
-                  <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="truncate flex-1 font-medium">{doc}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-slate-600 text-center py-4">
-                No documents uploaded yet.
-              </p>
-            )}
-          </div>
-
-          {stats && stats.total_chunks > 0 && (
-            <button
-              onClick={handleClearDocuments}
-              className="mt-2 flex items-center space-x-1 text-xs text-rose-400 hover:text-rose-300 transition"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear ChromaDB ({stats.total_chunks} chunks)</span>
-            </button>
-          )}
-        </div>
-
-        {/* Section 3: Sync to Cloud Pinecone */}
-        <div className="mt-6 pt-5 border-t border-slate-800">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-            <Cloud className="w-3.5 h-3.5 text-purple-400" />
-            <span>2. Cloud Replicate (Pinecone)</span>
-          </h3>
-
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
-            <div>
-              <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                Pinecone Target Index
-              </label>
-              <input
-                type="text"
-                value={indexName}
-                onChange={(e) => setIndexName(e.target.value)}
-                placeholder="attention-paper"
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                Pinecone API Key (Optional if set in .env)
-              </label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="pcsk_..."
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <button
-              onClick={handleSyncPinecone}
-              disabled={isSyncing || !stats || stats.total_chunks === 0}
-              className={`w-full py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition ${
-                isSyncing || !stats || stats.total_chunks === 0
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-600/20'
+          {/* Feedback alert */}
+          {feedback && (
+            <div
+              className={`mt-4 p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                feedback.type === 'success'
+                  ? 'bg-[var(--color-accent)]/10 text-[var(--color-accent)] border-[var(--color-accent)]/20'
+                  : 'bg-[var(--color-warn)]/10 text-[var(--color-warn)] border-[var(--color-warn)]/20'
               }`}
             >
-              {isSyncing ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Pushing Vectors to Pinecone...</span>
-                </>
+              {feedback.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
               ) : (
-                <>
-                  <Cloud className="w-3.5 h-3.5" />
-                  <span>Sync {stats?.total_chunks ?? 0} Vectors to Pinecone</span>
-                </>
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               )}
-            </button>
+              <span className="leading-snug">{feedback.text}</span>
+            </div>
+          )}
+
+          {/* Dropzone */}
+          <div className="mt-5">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".pdf,.txt,.md"
+              className="hidden"
+            />
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)]/60 rounded-2xl p-6 text-center transition cursor-pointer bg-[var(--color-surface-2)]/30 group"
+            >
+              <UploadCloud className="w-7 h-7 mx-auto text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)] transition mb-2" />
+              <div className="text-xs font-medium text-[var(--color-text)]">
+                {isUploading ? 'Chunking and embedding document...' : 'Click or drop files to index'}
+              </div>
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
+                PDF, TXT, or MD documents
+              </p>
+            </div>
           </div>
+
+          {/* Uploaded Documents List */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                Indexed Documents ({documents.length})
+              </span>
+              <span className="text-[11px] font-mono text-[var(--color-text-muted)]">
+                {totalChunks} total chunks
+              </span>
+            </div>
+
+            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+              {documents.length === 0 ? (
+                <div className="p-4 rounded-xl bg-[var(--color-surface-2)]/40 border border-[var(--color-border)] text-center text-xs text-[var(--color-text-muted)]">
+                  No documents in local ChromaDB yet.
+                </div>
+              ) : (
+                documents.map((doc, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] text-xs text-[var(--color-text)]"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <FileText className="w-3.5 h-3.5 text-[var(--color-accent)] shrink-0" />
+                      <span className="truncate font-mono text-[11px]">{doc}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {documents.length > 0 && (
+              <button
+                onClick={handleClearDocuments}
+                className="mt-2 text-[11px] text-[var(--color-warn)] hover:underline flex items-center gap-1 transition cursor-pointer"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Clear all indexed documents</span>
+              </button>
+            )}
+          </div>
+
+          {/* Pinecone Cloud Sync Section */}
+          <div className="mt-6 pt-5 border-t border-[var(--color-border)]">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-text-muted)] flex items-center gap-1.5">
+                <Cloud className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                Pinecone Cloud Sync
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--color-surface-2)] text-[var(--color-accent)]">
+                Status: {syncStatus}
+              </span>
+            </div>
+
+            <div className="space-y-2 mt-3">
+              <input
+                type="text"
+                placeholder="Optional Pinecone API Key (or env)"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                className="w-full bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] font-mono"
+              />
+              <input
+                type="text"
+                placeholder="Pinecone Index Name"
+                value={indexName}
+                onChange={(e) => setIndexName(e.target.value)}
+                className="w-full bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] font-mono"
+              />
+
+              <button
+                onClick={handleSyncPinecone}
+                disabled={isSyncing || totalChunks === 0}
+                className="w-full mt-1 py-2 px-3 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-surface)] border border-[var(--color-border)] text-xs text-[var(--color-text)] hover:text-[var(--color-accent)] transition flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {isSyncing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-accent)]" />
+                    <span>Syncing ChromaDB vectors to Pinecone...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Sync to Pinecone Cloud</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="pt-4 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-muted)] flex items-center justify-between">
+          <span>ChromaDB + Pinecone Dual Store</span>
+          <button
+            onClick={onRefreshStats}
+            className="hover:text-[var(--color-text)] transition flex items-center gap-1"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>Refresh</span>
+          </button>
         </div>
       </div>
     </div>

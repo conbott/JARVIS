@@ -33,6 +33,17 @@ def is_datetime_query(query: str) -> bool:
             return True
     return False
 
+def is_realtime_query(query: str) -> bool:
+    """
+    Checks if the user query is asking for live/real-time info (news, current events, latest version, weather, etc.)
+    """
+    q = query.lower().strip()
+    patterns = [
+        r'\b(latest|current|recently|recent|newest|today|yesterday|tomorrow|tonight|breaking news|live|stock price|weather|release date)\b',
+        r'\b(what is happening|what happened|latest version|who won|election)\b'
+    ]
+    return any(re.search(p, q) for p in patterns)
+
 SYSTEM_PROMPT_DIRECT = """You are an advanced, intelligent Local RAG & Voice AI Assistant.
 System Knowledge & Environment:
 - Real-Time Clock: {current_time}
@@ -277,6 +288,8 @@ class RAGPipeline:
 
             # Fallback to Live DuckDuckGo Web Search if no document match
             if path != "document":
+                if is_realtime_query(standalone_query):
+                    fallback_reason = "realtime_query"
                 yield f"data: {json.dumps({'type': 'status', 'message': f'Searching live web for: \"{standalone_query}\"...'})}\n\n"
                 search_results = web_search_engine.search(standalone_query)
                 if search_results:
