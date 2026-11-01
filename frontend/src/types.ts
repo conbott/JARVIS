@@ -1,9 +1,12 @@
 export interface SourceItem {
   title: string;
   url?: string;
+  domain?: string;
+  filename?: string;
+  page?: number | null;
   snippet?: string;
   source_type: 'document' | 'web' | 'direct';
-  score?: number;
+  score?: number; // Normalized cosine similarity [0.0, 1.0]
 }
 
 export interface ChatMessage {
@@ -11,6 +14,10 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   source_type?: 'document' | 'web' | 'direct';
+  path?: 'document' | 'web' | 'direct';
+  fallback_reason?: 'low_confidence' | 'empty_store' | 'realtime_query' | 'forced_web' | null;
+  best_score?: number | null;
+  threshold?: number;
   sources?: SourceItem[];
   audioUrl?: string;
   timestamp: string;

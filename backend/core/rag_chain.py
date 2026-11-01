@@ -1,6 +1,8 @@
+import os
 import json
 import logging
 import re
+from urllib.parse import urlparse
 from datetime import datetime
 from typing import AsyncGenerator, List, Dict, Any, Optional
 from config import settings
@@ -131,7 +133,15 @@ class RAGPipeline:
         # Step 0: Check for direct Date/Time question
         if is_datetime_query(query):
             yield f"data: {json.dumps({'type': 'status', 'message': 'Checking system clock...'})}\n\n"
-            yield f"data: {json.dumps({'type': 'sources', 'source_type': 'direct', 'sources': []})}\n\n"
+            yield f"data: {json.dumps({
+                'type': 'sources',
+                'source_type': 'direct',
+                'path': 'direct',
+                'fallback_reason': 'realtime_query',
+                'best_score': None,
+                'threshold': self.threshold,
+                'sources': []
+            })}\n\n"
             
             now = datetime.now()
             time_resp = f"📅 **Today is {now.strftime('%A, %B %d, %Y')}**.\n\n⏰ The current local time is **{now.strftime('%I:%M:%S %p')}**."
@@ -151,17 +161,63 @@ class RAGPipeline:
 
         sources: List[Dict[str, Any]] = []
         source_type = "direct"
+        path = "direct"
+        fallback_reason: Optional[str] = None
+        best_score: Optional[float] = None
         context_text = ""
         system_prompt = SYSTEM_PROMPT_DIRECT.format(current_time=current_time_str)
 
+        # Helper to construct structured document source records
+        # SCORE SEMANTICS:
+        # 'score' is cosine SIMILARITY (relevance score in [0.0, 1.0]), NOT distance.
+        # Higher score = more relevant/similar (1.0 = identical match, 0.0 = completely dissimilar).
+        def format_doc_source(doc: Any, sc: float) -> Dict[str, Any]:
+            src_name = doc.metadata.get("source", "Uploaded Document")
+            fname = os.path.basename(src_name)
+            raw_pg = doc.metadata.get("page")
+            is_pdf = fname.lower().endswith(".pdf")
+            page_val = int(raw_pg) if (is_pdf and raw_pg is not None) else None
+            title_val = f"{fname} (Page {raw_pg})" if (is_pdf and raw_pg is not None) else fname
+            content_str = doc.page_content.strip()
+            snippet_val = content_str[:240] + ("..." if len(content_str) > 240 else "")
+
+            return {
+                "title": title_val,
+                "filename": fname,
+                "page": page_val,
+                "snippet": snippet_val,
+                "source_type": "document",
+                "score": round(float(sc), 3)  # Normalized cosine similarity [0.0, 1.0]
+            }
+
+        # Helper to construct structured web source records
+        def format_web_source(item: Dict[str, Any]) -> Dict[str, Any]:
+            url_val = item.get("url") or item.get("href") or ""
+            domain_val = item.get("domain", "")
+            if not domain_val and url_val:
+                try:
+                    from urllib.parse import urlparse
+                    domain_val = urlparse(url_val).netloc.replace("www.", "")
+                except Exception:
+                    domain_val = ""
+            return {
+                "title": item.get("title", "Untitled Source"),
+                "url": url_val,
+                "domain": domain_val,
+                "snippet": item.get("snippet") or item.get("body") or "",
+                "source_type": "web"
+            }
+
         # MODE: Forced Web Search
         if search_mode == "web":
+            path = "web"
+            fallback_reason = "forced_web"
             yield f"data: {json.dumps({'type': 'status', 'message': f'Searching the web for: \"{standalone_query}\"...'})}\n\n"
             search_results = web_search_engine.search(standalone_query)
             if search_results:
                 source_type = "web"
                 context_text = web_search_engine.format_search_context(search_results)
-                sources = search_results
+                sources = [format_web_source(r) for r in search_results]
                 system_prompt = SYSTEM_PROMPT_SEARCH.format(current_time=current_time_str)
 
         # MODE: Forced Documents Only
@@ -170,20 +226,25 @@ class RAGPipeline:
             if total_chunks > 0:
                 doc_results = vector_store_manager.search_with_scores(standalone_query, k=settings.SIMILARITY_K)
                 if doc_results:
+                    path = "document"
                     source_type = "document"
+                    fallback_reason = None
+                    raw_best = float(max([s for _, s in doc_results]))
+                    best_score = round(raw_best, 3)
                     context_blocks = []
                     for doc, score in doc_results:
                         src_name = doc.metadata.get("source", "Uploaded Document")
                         page = doc.metadata.get("page", 1)
                         context_blocks.append(f"--- Document: {src_name} (Page/Chunk: {page}) ---\n{doc.page_content}")
-                        sources.append({
-                            "title": f"{src_name} (Page {page})",
-                            "snippet": doc.page_content[:250] + "...",
-                            "source_type": "document",
-                            "score": round(score, 3)
-                        })
+                        sources.append(format_doc_source(doc, score))
                     context_text = "\n\n".join(context_blocks)
                     system_prompt = SYSTEM_PROMPT_RAG.format(current_time=current_time_str)
+                else:
+                    path = "direct"
+                    fallback_reason = "low_confidence"
+            else:
+                path = "direct"
+                fallback_reason = "empty_store"
 
         # MODE: Auto (Smart RAG + Fallback)
         else:
@@ -191,39 +252,52 @@ class RAGPipeline:
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Checking uploaded documents...'})}\n\n"
                 doc_results = vector_store_manager.search_with_scores(standalone_query, k=settings.SIMILARITY_K)
                 if doc_results:
-                    best_score = max([score for _, score in doc_results])
-                    logger.info(f"ChromaDB search best score: {best_score:.4f} (Threshold: {self.threshold})")
+                    raw_best = float(max([s for _, s in doc_results]))
+                    best_score = round(raw_best, 3)
+                    logger.info(f"ChromaDB search best score (similarity): {best_score:.4f} (Threshold: {self.threshold})")
 
-                    if best_score >= self.threshold:
+                    if raw_best >= self.threshold:
+                        path = "document"
                         source_type = "document"
+                        fallback_reason = None
                         context_blocks = []
                         for doc, score in doc_results:
                             src_name = doc.metadata.get("source", "Uploaded Document")
                             page = doc.metadata.get("page", 1)
                             context_blocks.append(f"--- Document: {src_name} (Page/Chunk: {page}) ---\n{doc.page_content}")
-                            sources.append({
-                                "title": f"{src_name} (Page {page})",
-                                "snippet": doc.page_content[:250] + "...",
-                                "source_type": "document",
-                                "score": round(score, 3)
-                            })
+                            sources.append(format_doc_source(doc, score))
                         context_text = "\n\n".join(context_blocks)
                         system_prompt = SYSTEM_PROMPT_RAG.format(current_time=current_time_str)
+                    else:
+                        fallback_reason = "low_confidence"
+                else:
+                    fallback_reason = "low_confidence"
+            else:
+                fallback_reason = "empty_store"
 
             # Fallback to Live DuckDuckGo Web Search if no document match
-            if source_type != "document":
+            if path != "document":
                 yield f"data: {json.dumps({'type': 'status', 'message': f'Searching live web for: \"{standalone_query}\"...'})}\n\n"
                 search_results = web_search_engine.search(standalone_query)
                 if search_results:
+                    path = "web"
                     source_type = "web"
                     context_text = web_search_engine.format_search_context(search_results)
-                    sources = search_results
+                    sources = [format_web_source(r) for r in search_results]
                     system_prompt = SYSTEM_PROMPT_SEARCH.format(current_time=current_time_str)
 
         # Yield Sources Metadata Event
+        # SCORE SEMANTICS:
+        # 'best_score' and source 'score' are cosine SIMILARITY in [0.0, 1.0], NOT distance.
+        # Higher score = more similar/relevant (1.0 = identical, 0.0 = completely dissimilar).
+        # Compared against 'threshold' (0.45) to determine if local documents have confident relevance.
         init_event = {
             "type": "sources",
             "source_type": source_type,
+            "path": path,
+            "fallback_reason": fallback_reason,
+            "best_score": best_score,
+            "threshold": self.threshold,
             "sources": sources
         }
         yield f"data: {json.dumps(init_event)}\n\n"

@@ -45,9 +45,18 @@ class WebSearchEngine:
                     raw_results = list(ddgs.text(q, max_results=self.max_results))
                     if raw_results:
                         for item in raw_results:
+                            href = item.get("href", "")
+                            domain = ""
+                            if href:
+                                try:
+                                    from urllib.parse import urlparse
+                                    domain = urlparse(href).netloc.replace("www.", "")
+                                except Exception:
+                                    domain = ""
                             results.append({
                                 "title": item.get("title", "Untitled Source"),
-                                "url": item.get("href", ""),
+                                "url": href,
+                                "domain": domain,
                                 "snippet": item.get("body", ""),
                                 "source_type": "web"
                             })

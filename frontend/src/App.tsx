@@ -386,6 +386,10 @@ export default function App() {
                       ? {
                           ...m,
                           source_type: eventData.source_type,
+                          path: eventData.path,
+                          fallback_reason: eventData.fallback_reason,
+                          best_score: eventData.best_score,
+                          threshold: eventData.threshold,
                           sources: eventData.sources as SourceItem[],
                         }
                       : m
