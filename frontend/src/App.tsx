@@ -5,7 +5,15 @@ import { ChatMessageItem } from './components/ChatMessageItem';
 import { ChatInput } from './components/ChatInput';
 import { DocumentDrawer } from './components/DocumentDrawer';
 import { ThinkingStatus } from './components/ThinkingStatus';
-import type { ChatMessage, ChatSession, DocumentStats, HealthStatus, SourceItem, SearchMode } from './types';
+import type {
+  ChatMessage,
+  ChatSession,
+  DocumentStats,
+  HealthStatus,
+  SourceItem,
+  SearchMode,
+  VoiceOption,
+} from './types';
 import { Sparkles, FileText, Globe, Volume2 } from 'lucide-react';
 
 export default function App() {
@@ -36,8 +44,17 @@ export default function App() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [searchMode, setSearchMode] = useState<SearchMode>('auto');
 
+  // Voice & Audio Playback State
+  const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<string>(() => {
+    return localStorage.getItem('rag_assistant_voice') || 'en-US-GuyNeural';
+  });
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+  const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const audioInstanceRef = useRef<HTMLAudioElement | null>(null);
 
   // Sync sessions to localStorage
   useEffect(() => {
@@ -105,15 +122,118 @@ export default function App() {
     }
   };
 
+  const fetchVoices = async () => {
+    try {
+      const res = await fetch('/api/voice/voices');
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableVoices(data.voices || []);
+      }
+    } catch (e) {
+      console.error('Error fetching voices:', e);
+    }
+  };
+
   useEffect(() => {
     fetchHealth();
     fetchStats();
+    fetchVoices();
     const interval = setInterval(fetchHealth, 10000);
     return () => clearInterval(interval);
   }, []);
 
+  // Voice Selection Handler
+  const handleSelectVoice = (voiceId: string) => {
+    setSelectedVoice(voiceId);
+    try {
+      localStorage.setItem('rag_assistant_voice', voiceId);
+    } catch (e) {
+      console.error('Error saving selected voice:', e);
+    }
+  };
+
+  // Global Audio Controller (prevents overlapping and supports pausing/stopping)
+  const stopActiveAudio = () => {
+    if (audioInstanceRef.current) {
+      audioInstanceRef.current.pause();
+      audioInstanceRef.current.currentTime = 0;
+      audioInstanceRef.current = null;
+    }
+    setPlayingMessageId(null);
+  };
+
+  const handleSynthesizeVoice = async (text: string, voice?: string): Promise<string | undefined> => {
+    try {
+      const voiceRes = await fetch('/api/voice/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice: voice || selectedVoice }),
+      });
+      if (voiceRes.ok) {
+        const blob = await voiceRes.blob();
+        return URL.createObjectURL(blob);
+      }
+    } catch (e) {
+      console.error('Error synthesizing voice:', e);
+    }
+    return undefined;
+  };
+
+  const handleTogglePlayAudio = async (messageId: string, text: string) => {
+    // If currently playing this specific message, clicking it stops the playback!
+    if (playingMessageId === messageId) {
+      stopActiveAudio();
+      return;
+    }
+
+    // Stop any previously playing audio track immediately
+    stopActiveAudio();
+
+    // Check if the message already has an audio object URL cached
+    const targetMsg = messages.find((m) => m.id === messageId);
+    let url = targetMsg?.audioUrl;
+
+    if (!url) {
+      setSynthesizingMessageId(messageId);
+      url = await handleSynthesizeVoice(text, selectedVoice);
+      setSynthesizingMessageId(null);
+
+      if (url) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, audioUrl: url } : m))
+        );
+      }
+    }
+
+    if (url) {
+      const audio = new Audio(url);
+      audioInstanceRef.current = audio;
+      setPlayingMessageId(messageId);
+
+      audio.onended = () => {
+        if (audioInstanceRef.current === audio) {
+          setPlayingMessageId(null);
+          audioInstanceRef.current = null;
+        }
+      };
+
+      audio.onerror = () => {
+        if (audioInstanceRef.current === audio) {
+          setPlayingMessageId(null);
+          audioInstanceRef.current = null;
+        }
+      };
+
+      audio.play().catch((err) => {
+        console.error('Audio playback error:', err);
+        setPlayingMessageId(null);
+      });
+    }
+  };
+
   // Session Handlers
   const handleNewSession = () => {
+    stopActiveAudio();
     const newSession: ChatSession = {
       id: Date.now().toString(),
       title: 'New Conversation',
@@ -127,6 +247,7 @@ export default function App() {
 
   const handleDeleteSession = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    stopActiveAudio();
     setSessions((prev) => prev.filter((s) => s.id !== id));
     if (activeSessionId === id) {
       const remaining = sessions.filter((s) => s.id !== id);
@@ -141,6 +262,7 @@ export default function App() {
 
   const handleClearChat = () => {
     if (messages.length === 0 || confirm('Clear this conversation?')) {
+      stopActiveAudio();
       setMessages([]);
       if (activeSessionId) {
         setSessions((prev) =>
@@ -159,25 +281,11 @@ export default function App() {
     }
   };
 
-  const handleSynthesizeVoice = async (text: string): Promise<string | undefined> => {
-    try {
-      const voiceRes = await fetch('/api/voice/synthesize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-      if (voiceRes.ok) {
-        const blob = await voiceRes.blob();
-        return URL.createObjectURL(blob);
-      }
-    } catch (e) {
-      console.error('Error synthesizing voice:', e);
-    }
-    return undefined;
-  };
-
   const handleSendMessage = async (text: string, isVoice: boolean, forcedMode?: SearchMode) => {
     if (!text.trim() || isLoading) return;
+
+    // Stop active audio when sending a new message
+    stopActiveAudio();
 
     const activeMode = forcedMode || searchMode;
 
@@ -320,13 +428,34 @@ export default function App() {
 
       // If Push-to-Talk voice used: auto-synthesize and play
       if (isVoice && fullGeneratedContent.trim()) {
-        const voiceUrl = await handleSynthesizeVoice(fullGeneratedContent);
+        stopActiveAudio();
+        const voiceUrl = await handleSynthesizeVoice(fullGeneratedContent, selectedVoice);
         if (voiceUrl) {
           setMessages((prev) =>
             prev.map((m) => (m.id === assistantMsgId ? { ...m, audioUrl: voiceUrl } : m))
           );
           const audio = new Audio(voiceUrl);
-          audio.play().catch((e) => console.log('Audio autoplay policy:', e));
+          audioInstanceRef.current = audio;
+          setPlayingMessageId(assistantMsgId);
+
+          audio.onended = () => {
+            if (audioInstanceRef.current === audio) {
+              setPlayingMessageId(null);
+              audioInstanceRef.current = null;
+            }
+          };
+
+          audio.onerror = () => {
+            if (audioInstanceRef.current === audio) {
+              setPlayingMessageId(null);
+              audioInstanceRef.current = null;
+            }
+          };
+
+          audio.play().catch((e) => {
+            console.log('Audio autoplay policy:', e);
+            setPlayingMessageId(null);
+          });
         }
       }
     } catch (error: any) {
@@ -380,6 +509,11 @@ export default function App() {
           stats={stats}
           onOpenDrawer={() => setIsDrawerOpen(true)}
           onClearChat={handleClearChat}
+          selectedVoice={selectedVoice}
+          onSelectVoice={handleSelectVoice}
+          availableVoices={availableVoices}
+          isPlayingAudio={playingMessageId !== null}
+          onStopAudio={stopActiveAudio}
         />
 
         {/* Messages Stream */}
@@ -460,7 +594,9 @@ export default function App() {
                 <ChatMessageItem
                   key={msg.id}
                   message={msg}
-                  onSynthesizeVoice={handleSynthesizeVoice}
+                  isPlayingAudio={playingMessageId === msg.id}
+                  isSynthesizingAudio={synthesizingMessageId === msg.id}
+                  onTogglePlayAudio={handleTogglePlayAudio}
                 />
               ))}
 
@@ -484,6 +620,7 @@ export default function App() {
           searchMode={searchMode}
           onSearchModeChange={setSearchMode}
           health={health}
+          onStopAudio={stopActiveAudio}
         />
 
         {/* Slide-out Document Drawer */}

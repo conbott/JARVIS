@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Mic, Square, Globe, FileText, Sparkles } from 'lucide-react';
+import { Send, Mic, Square, Globe, FileText, Sparkles, X, Check, Loader2 } from 'lucide-react';
 import type { HealthStatus, SearchMode } from '../types';
 
 interface ChatInputProps {
@@ -9,6 +9,7 @@ interface ChatInputProps {
   searchMode: SearchMode;
   onSearchModeChange: (mode: SearchMode) => void;
   health: HealthStatus | null;
+  onStopAudio?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -18,55 +19,165 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   searchMode,
   onSearchModeChange,
   health,
+  onStopAudio,
 }) => {
   const [text, setText] = useState('');
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<any>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Setup Web Speech API if supported in browser
+  // Clean up recording streams on unmount
   useEffect(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
 
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
+  const startRecording = async () => {
+    // If any audio response is currently playing, stop it so it doesn't leak into the mic
+    if (onStopAudio) {
+      onStopAudio();
+    }
 
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript.trim()) {
-          onSendMessage(transcript.trim(), true);
+    try {
+      audioChunksRef.current = [];
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+
+      // Determine best supported mime type
+      const mimeType = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ].find((type) => MediaRecorder.isTypeSupported(type)) || '';
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
         }
-        setIsListening(false);
       };
 
-      recognition.onerror = () => {
-        setIsListening(false);
+      recorder.onstop = async () => {
+        // Clean up mic track stream
+        if (audioStreamRef.current) {
+          audioStreamRef.current.getTracks().forEach((t) => t.stop());
+          audioStreamRef.current = null;
+        }
+
+        const mime = recorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mime });
+
+        // If audio blob is tiny (< 1000 bytes, likely just click noise), skip
+        if (audioBlob.size < 1000) {
+          setIsRecording(false);
+          return;
+        }
+
+        await processTranscription(audioBlob, mime);
       };
 
-      recognition.onend = () => {
-        setIsListening(false);
-      };
+      recorder.start(250);
+      setIsRecording(true);
+      setRecordingDuration(0);
 
-      recognitionRef.current = recognition;
+      timerRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      console.error('Microphone access error:', err);
+      alert(
+        'Could not access microphone. Please ensure microphone permissions are granted in your browser settings (Opera GX / Chrome / Edge).'
+      );
+      setIsRecording(false);
     }
-  }, [onSendMessage]);
+  };
 
-  const toggleSpeech = () => {
-    if (!recognitionRef.current) {
-      alert('Speech Recognition is not supported in this browser. Please use Google Chrome or Edge.');
-      return;
+  const stopRecording = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
 
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  const cancelRecording = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+    }
+
+    audioChunksRef.current = [];
+    setIsRecording(false);
+    setRecordingDuration(0);
+  };
+
+  const processTranscription = async (blob: Blob, mimeType: string) => {
+    setIsTranscribing(true);
+    try {
+      const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const formData = new FormData();
+      formData.append('audio', blob, `speech.${ext}`);
+
+      const res = await fetch('/api/voice/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(`STT failed (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      if (data.text && data.text.trim()) {
+        onSendMessage(data.text.trim(), true);
+      } else {
+        console.warn('Whisper STT: No speech detected.');
+      }
+    } catch (err) {
+      console.error('Whisper transcription error:', err);
+      alert('Speech transcription encountered an error. Please try speaking again.');
+    } finally {
+      setIsTranscribing(false);
+      setRecordingDuration(0);
+    }
+  };
+
+  const toggleMic = () => {
+    if (isRecording) {
+      stopRecording();
     } else {
-      setIsListening(true);
-      recognitionRef.current.start();
+      startRecording();
     }
   };
 
@@ -78,6 +189,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleSubmit = () => {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
     if (!text.trim() || isLoading) return;
     onSendMessage(text.trim(), false);
     setText('');
@@ -91,6 +206,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setText(e.target.value);
     e.target.style.height = 'auto';
     e.target.style.height = `${Math.min(e.target.scrollHeight, 180)}px`;
+  };
+
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   const modelDisplay = health?.llm_model || 'Local LLM';
@@ -154,27 +275,74 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </div>
 
       {/* Main Input Floating Bar */}
-      <div className="max-w-4xl mx-auto flex items-end gap-2 bg-[#0c0d14] border border-white/[0.08] focus-within:border-indigo-500/50 rounded-2xl p-2 shadow-2xl shadow-black/50 transition">
+      <div className="max-w-4xl mx-auto flex items-end gap-2 bg-[#0c0d14] border border-white/[0.08] focus-within:border-indigo-500/50 rounded-2xl p-2 shadow-2xl shadow-black/50 transition relative">
+        {/* Recording Overlay banner if recording or transcribing */}
+        {isRecording && (
+          <div className="absolute inset-x-2 top-2 bottom-2 bg-[#12141e] rounded-xl flex items-center justify-between px-3 border border-rose-500/30 z-20 shadow-xl">
+            <div className="flex items-center space-x-3">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500" />
+              </span>
+              <span className="text-xs font-semibold text-rose-300 font-mono">
+                Recording... {formatTime(recordingDuration)}
+              </span>
+              {/* Dynamic waveform visualizer bars */}
+              <div className="hidden sm:flex items-center space-x-0.5">
+                <span className="w-1 h-3 bg-rose-400 animate-pulse" />
+                <span className="w-1 h-5 bg-rose-400 animate-pulse delay-75" />
+                <span className="w-1 h-2 bg-rose-400 animate-pulse delay-150" />
+                <span className="w-1 h-6 bg-rose-400 animate-pulse delay-100" />
+                <span className="w-1 h-4 bg-rose-400 animate-pulse delay-200" />
+              </div>
+              <span className="hidden md:inline text-[11px] text-slate-400">
+                (Click Stop or Check to transcribe with Whisper)
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-1.5">
+              <button
+                type="button"
+                onClick={cancelRecording}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.08] transition"
+                title="Discard audio"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={stopRecording}
+                className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md shadow-rose-600/30 transition"
+                title="Done speaking, send to Whisper"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Send</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isTranscribing && (
+          <div className="absolute inset-x-2 top-2 bottom-2 bg-[#12141e] rounded-xl flex items-center justify-center space-x-2.5 px-3 border border-indigo-500/30 z-20 shadow-xl">
+            <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+            <span className="text-xs font-medium text-indigo-200">
+              Transcribing audio with faster-whisper (CPU INT8)...
+            </span>
+          </div>
+        )}
+
         {/* Push-to-Talk Mic Button */}
         <button
-          onClick={toggleSpeech}
-          disabled={isLoading}
-          title={isListening ? 'Stop Listening' : 'Push-to-Talk (Mic Input -> Voice Output)'}
+          onClick={toggleMic}
+          disabled={isLoading || isTranscribing}
+          title={isRecording ? 'Finish Speaking' : 'Push-to-Talk (Record Voice -> Whisper STT)'}
           className={`p-2.5 rounded-xl transition shrink-0 relative ${
-            isListening
-              ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30 animate-pulse'
+            isRecording
+              ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
               : 'text-slate-400 hover:text-indigo-400 hover:bg-white/[0.05]'
           }`}
         >
-          {isListening ? (
-            <div className="flex items-center gap-1">
-              <span className="w-1 h-3 bg-white animate-bounce" />
-              <span className="w-1 h-4 bg-white animate-bounce [animation-delay:0.1s]" />
-              <span className="w-1 h-2 bg-white animate-bounce [animation-delay:0.2s]" />
-            </div>
-          ) : (
-            <Mic className="w-4 h-4" />
-          )}
+          <Mic className="w-4 h-4" />
         </button>
 
         {/* Text Area */}
@@ -185,13 +353,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           placeholder={
-            isListening
-              ? 'Listening to your voice... (speak clearly)'
-              : searchMode === 'web'
-              ? 'Search live internet data with DuckDuckGo (e.g. current releases, stock prices, news)...'
+            searchMode === 'web'
+              ? 'Search live internet data with DuckDuckGo (e.g. current releases, news, facts)...'
               : searchMode === 'docs'
               ? 'Ask questions strictly grounded in your uploaded documents...'
-              : 'Ask anything, query uploaded documents, or search the live web...'
+              : 'Ask anything, query uploaded documents, or speak with push-to-talk mic...'
           }
           className="flex-1 bg-transparent border-0 text-sm text-slate-100 placeholder-slate-500 focus:ring-0 focus:outline-none resize-none py-2 px-1 max-h-44"
         />

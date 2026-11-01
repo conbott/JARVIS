@@ -9,6 +9,7 @@ import {
   FileText,
   Globe,
   Volume2,
+  Square,
   ExternalLink,
   Loader2,
 } from 'lucide-react';
@@ -16,53 +17,24 @@ import type { ChatMessage } from '../types';
 
 interface ChatMessageItemProps {
   message: ChatMessage;
-  onSynthesizeVoice?: (text: string) => Promise<string | undefined>;
+  isPlayingAudio?: boolean;
+  isSynthesizingAudio?: boolean;
+  onTogglePlayAudio?: (messageId: string, text: string) => void;
 }
 
 export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   message,
-  onSynthesizeVoice,
+  isPlayingAudio = false,
+  isSynthesizingAudio = false,
+  onTogglePlayAudio,
 }) => {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | undefined>(message.audioUrl);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handlePlayVoice = async () => {
-    if (audioUrl) {
-      const audio = new Audio(audioUrl);
-      setIsPlayingAudio(true);
-      audio.onended = () => setIsPlayingAudio(false);
-      audio.onerror = () => setIsPlayingAudio(false);
-      audio.play().catch(() => setIsPlayingAudio(false));
-      return;
-    }
-
-    if (onSynthesizeVoice && message.content) {
-      setIsLoadingAudio(true);
-      try {
-        const url = await onSynthesizeVoice(message.content);
-        if (url) {
-          setAudioUrl(url);
-          const audio = new Audio(url);
-          setIsPlayingAudio(true);
-          audio.onended = () => setIsPlayingAudio(false);
-          audio.onerror = () => setIsPlayingAudio(false);
-          audio.play().catch(() => setIsPlayingAudio(false));
-        }
-      } catch (err) {
-        console.error('TTS synthesis error:', err);
-      } finally {
-        setIsLoadingAudio(false);
-      }
-    }
   };
 
   // Extract clean domain for web source badge
@@ -243,25 +215,48 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                 )}
               </button>
 
-              <button
-                onClick={handlePlayVoice}
-                disabled={isLoadingAudio}
-                className={`flex items-center space-x-1 px-2 py-1 rounded-lg transition ${
-                  isPlayingAudio
-                    ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
-                    : 'hover:bg-white/[0.05] hover:text-slate-200 text-slate-400'
-                }`}
-                title="Listen to this response via Neural TTS"
-              >
-                {isLoadingAudio ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                ) : (
-                  <Volume2 className={`w-3.5 h-3.5 ${isPlayingAudio ? 'text-indigo-400 animate-pulse' : ''}`} />
-                )}
-                <span className="text-[11px]">
-                  {isPlayingAudio ? 'Playing...' : isLoadingAudio ? 'Synthesizing...' : 'Speak'}
-                </span>
-              </button>
+              {onTogglePlayAudio && (
+                <button
+                  onClick={() => onTogglePlayAudio(message.id, message.content)}
+                  disabled={isSynthesizingAudio}
+                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs transition ${
+                    isPlayingAudio
+                      ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 hover:bg-rose-500/25 shadow-sm shadow-rose-500/10'
+                      : isSynthesizingAudio
+                      ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20'
+                      : 'hover:bg-white/[0.05] hover:text-slate-200 text-slate-400'
+                  }`}
+                  title={
+                    isPlayingAudio
+                      ? 'Stop speech playback immediately'
+                      : isSynthesizingAudio
+                      ? 'Generating speech...'
+                      : 'Read out loud using selected Neural Voice'
+                  }
+                >
+                  {isSynthesizingAudio ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                      <span className="text-[11px] text-indigo-300">Synthesizing...</span>
+                    </>
+                  ) : isPlayingAudio ? (
+                    <>
+                      <Square className="w-3 h-3 fill-rose-400 text-rose-400" />
+                      <span className="text-[11px] font-medium text-rose-300">Stop Speaking</span>
+                      <span className="flex space-x-0.5 items-end h-3 ml-0.5">
+                        <span className="w-0.5 h-2 bg-rose-400 animate-pulse" />
+                        <span className="w-0.5 h-3 bg-rose-400 animate-pulse delay-75" />
+                        <span className="w-0.5 h-1.5 bg-rose-400 animate-pulse delay-150" />
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span className="text-[11px]">Speak</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           )}
         </div>

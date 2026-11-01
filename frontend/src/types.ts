@@ -71,3 +71,10 @@ export interface ModelsResponse {
 }
 
 export type SearchMode = 'auto' | 'web' | 'docs';
+
+export interface VoiceOption {
+  id: string;
+  name: string;
+  gender: string;
+  accent: string;
+}
