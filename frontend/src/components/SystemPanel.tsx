@@ -1,6 +1,24 @@
-import React from 'react';
-import { X, Cpu, Database, Cloud, Radio, Volume2, ShieldCheck, ChevronDown, Server } from 'lucide-react';
-import type { HealthStatus, DocumentStats, VoiceOption } from '../types';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Cpu,
+  Database,
+  Cloud,
+  Radio,
+  Volume2,
+  ShieldCheck,
+  ChevronDown,
+  Server,
+  Sparkles,
+  Copy,
+  Check,
+  RefreshCw,
+} from 'lucide-react';
+import type { HealthStatus, DocumentStats, VoiceOption, ModelInfo } from '../types';
+
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL
+  ? (import.meta as any).env.VITE_API_BASE_URL.replace(/\/$/, '')
+  : 'http://localhost:8000';
 
 interface SystemPanelProps {
   isOpen: boolean;
@@ -10,6 +28,7 @@ interface SystemPanelProps {
   selectedVoice: string;
   onSelectVoice?: (voiceId: string) => void;
   availableVoices: VoiceOption[];
+  onRefreshHealth?: () => void;
 }
 
 export const SystemPanel: React.FC<SystemPanelProps> = ({
@@ -20,17 +39,83 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
   selectedVoice,
   onSelectVoice,
   availableVoices,
+  onRefreshHealth,
 }) => {
+  const [installedModels, setInstalledModels] = useState<ModelInfo[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [switchingModel, setSwitchingModel] = useState(false);
+  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const fetchModels = async () => {
+      setLoadingModels(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/models`);
+        if (res.ok) {
+          const data = await res.json();
+          const models: ModelInfo[] = (data.installed_models || []).filter(
+            (m: ModelInfo) => !m.name.toLowerCase().includes('embed')
+          );
+          setInstalledModels(models);
+        }
+      } catch (err) {
+        console.error('Failed to fetch installed models:', err);
+      } finally {
+        setLoadingModels(false);
+      }
+    };
+    fetchModels();
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const hardware = health?.device_info?.device_name || 'Dynamic Hardware Detection';
   const vram = health?.device_info?.vram_gb ? `${health.device_info.vram_gb} GB` : 'System RAM';
   const isGpu = health?.device_info?.is_gpu ?? true;
+  const vramGb = health?.device_info?.vram_gb;
   const chunkCount = stats?.total_chunks ?? 0;
   const isHosted = health?.hosted || (health?.provider && health.provider !== 'ollama');
   const providerName = health?.provider || 'ollama';
   const modelName = health?.model || health?.llm_model || 'qwen2.5-coder:7b';
   const vectorBackend = health?.vector_backend || 'chroma';
+
+  // Smart Hardware Recommendation
+  let recModel = 'qwen2.5-coder:7b';
+  let recDesc = '7B params · Best balance of reasoning, coding, and speed for 6GB–10GB VRAM.';
+  if (!isGpu || (vramGb !== null && vramGb !== undefined && vramGb < 6)) {
+    recModel = 'llama3.2:3b';
+    recDesc = '3B params · Ultra-lightweight & fast, tailored for CPU or entry GPUs (<6GB VRAM).';
+  } else if (vramGb !== null && vramGb !== undefined && vramGb >= 12) {
+    recModel = 'qwen2.5-coder:14b';
+    recDesc = '14B params · Advanced deep reasoning & code generation for 12GB+ GPUs.';
+  }
+  const pullCmd = `ollama pull ${recModel}`;
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCmd(text);
+    setTimeout(() => setCopiedCmd(null), 2000);
+  };
+
+  const handleSelectModel = async (newModel: string) => {
+    if (!newModel || newModel === modelName || switchingModel) return;
+    setSwitchingModel(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/models/select`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: newModel }),
+      });
+      if (res.ok) {
+        onRefreshHealth?.();
+      }
+    } catch (err) {
+      console.error('Failed to switch model:', err);
+    } finally {
+      setSwitchingModel(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -114,17 +199,43 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
               <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] mb-2">
                 Language & Embeddings
               </div>
-              <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-muted)] flex items-center gap-1.5">
-                    <Radio className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-                    LLM Model
-                  </span>
-                  <span className="font-mono text-[var(--color-text)] text-[11px] truncate max-w-[160px]">
-                    {modelName}
-                  </span>
+              <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] space-y-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[var(--color-muted)] flex items-center gap-1.5">
+                      <Radio className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                      Active LLM
+                    </span>
+                    {(switchingModel || loadingModels) && (
+                      <span className="text-[10px] text-[var(--color-accent)] flex items-center gap-1 animate-pulse">
+                        <RefreshCw className="w-3 h-3 animate-spin" /> {switchingModel ? 'Switching...' : 'Scanning...'}
+                      </span>
+                    )}
+                  </div>
+                  {installedModels.length > 0 ? (
+                    <div className="relative">
+                      <select
+                        value={modelName}
+                        onChange={(e) => handleSelectModel(e.target.value)}
+                        disabled={switchingModel}
+                        className="w-full appearance-none bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] text-xs rounded-lg px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] cursor-pointer disabled:opacity-50"
+                      >
+                        {installedModels.map((m) => (
+                          <option key={m.name} value={m.name} className="bg-[var(--color-surface)] text-[var(--color-text)]">
+                            {m.name} {m.size_gb > 0 ? `(${m.size_gb} GB)` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-[var(--color-muted)] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  ) : (
+                    <div className="font-mono text-[var(--color-text)] text-xs px-2.5 py-1.5 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
+                      {modelName}
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center justify-between">
+
+                <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border)]/60">
                   <span className="text-[var(--color-muted)]">Embeddings</span>
                   <span className="font-mono text-[var(--color-text)] text-[11px] truncate max-w-[160px]">
                     {health?.embedding_model || 'qwen3-embedding:0.6b'}
@@ -132,6 +243,41 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Smart Hardware Model Recommendation (Local Ollama mode only) */}
+            {!isHosted && (
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] mb-2 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-[var(--color-accent)]" />
+                  <span>Hardware Guide & Recommendations</span>
+                </div>
+                <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] space-y-2.5">
+                  <div className="text-[11px] text-[var(--color-text)] leading-relaxed">
+                    <span className="font-semibold text-[var(--color-accent)]">{recModel}</span>
+                    <p className="text-[10px] text-[var(--color-muted)] mt-0.5">{recDesc}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-[var(--color-surface)] text-[var(--color-text)] px-2 py-1.5 rounded-md text-[10.5px] font-mono border border-[var(--color-border)] truncate select-all">
+                      {pullCmd}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(pullCmd)}
+                      className="p-1.5 rounded-md bg-[var(--color-surface)] hover:bg-[var(--color-surface-2)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)] transition cursor-pointer shrink-0"
+                      title="Copy pull command"
+                    >
+                      {copiedCmd === pullCmd ? (
+                        <Check className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-[var(--color-muted)] leading-tight">
+                    Run in your terminal. Once downloaded, it appears in the model dropdown above automatically!
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Vector Storage */}
             <div>

@@ -663,6 +663,7 @@ export default function App() {
           selectedVoice={selectedVoice}
           onSelectVoice={handleSelectVoice}
           availableVoices={availableVoices}
+          onRefreshHealth={fetchHealth}
         />
       </div>
     </div>
