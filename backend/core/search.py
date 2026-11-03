@@ -6,7 +6,7 @@ from ddgs import DDGS
 logger = logging.getLogger(__name__)
 
 class WebSearchEngine:
-    def __init__(self, max_results: int = 4):
+    def __init__(self, max_results: int = 6):
         self.max_results = max_results
 
     def clean_search_query(self, query: str) -> str:
