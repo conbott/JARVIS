@@ -121,95 +121,99 @@ graph TD
 
 ---
 
-## 🚀 Setup & Installation
+## 🚀 Quickstart & Installation
 
-### 1. Pull Ollama Models
+### ⚡ Option A: One-Click Setup (Windows)
 
+If you are on Windows, the entire application can be set up and launched with two scripts:
+
+1. **One-Click Installation**:
+   Double-click or run `setup.bat`:
+   ```powershell
+   .\setup.bat
+   ```
+   *This automatically creates `backend\.env`, provisions the Python `.venv`, installs all backend packages, and installs frontend node modules.*
+
+2. **Pull the Required Models**:
+   Open a terminal and pull your preferred model (see the [Hardware Guide](#-hardware--model-selection-guide) below):
+   ```bash
+   # Default LLM (7B parameters)
+   ollama pull qwen2.5-coder:7b
+
+   # Dense vector embedding model (Required)
+   ollama pull qwen3-embedding:0.6b
+   ```
+
+3. **Launch All Services**:
+   ```powershell
+   .\start_all.bat
+   ```
+   *Boots Ollama, FastAPI backend (:8000), and Vite frontend (:5173) in dedicated windows. Open `http://localhost:5173` to start chatting!*
+   To shut down all services at once, run `.\stop_all.bat`.
+
+---
+
+### 🧠 Hardware & Model Selection Guide
+
+Jarvis dynamically inspects your host machine's hardware on startup and provides tailored model recommendations in the **System & Environment** panel:
+
+| Hardware Tier | Detected Specs | Recommended LLM | Memory Footprint | Pull Command |
+| :--- | :--- | :--- | :--- | :--- |
+| **Entry / CPU** | CPU Only or VRAM < 6GB | `llama3.2:3b` | ~2.5 GB RAM | `ollama pull llama3.2:3b` |
+| **Mid-Tier (Default)** | 6GB – 10GB VRAM (e.g. RTX 3060, 4060) | `qwen2.5-coder:7b` | ~5.0 GB VRAM | `ollama pull qwen2.5-coder:7b` |
+| **High-End** | 12GB+ VRAM or Apple Silicon 16GB+ | `qwen2.5-coder:14b` | ~9.0 GB VRAM | `ollama pull qwen2.5-coder:14b` |
+| **Embedding (Required)** | All Configurations | `qwen3-embedding:0.6b` | ~0.6 GB RAM | `ollama pull qwen3-embedding:0.6b` |
+
+> [!TIP]
+> **Switching Models On The Fly**: You can download multiple models. Open the **System Panel** (gear icon in the top right) inside the Jarvis web app to switch active models in real time without restarting any servers!
+
+---
+
+### 🛠️ Option B: Manual Setup (macOS / Linux / Windows)
+
+#### 1. Pull Ollama Models
 Ensure Ollama is running (`ollama serve`), then pull the required models:
-
 ```bash
-# LLM Generation Model (7B parameters, 4096+ context window)
 ollama pull qwen2.5-coder:7b
-
-# Dense Vector Embedding Model
 ollama pull qwen3-embedding:0.6b
 ```
 
-*(For lightweight machines or CPU-only setups, you can alternatively use `ollama pull llama3.2:3b` and `ollama pull nomic-embed-text`)*
-
----
-
-### 2. Configure Environment
-
-Copy the example environment file:
-
+#### 2. Configure Environment
 ```bash
-# In the project root or backend directory:
-copy .env.example backend\.env
+# In the project root:
+cp .env.example backend/.env
+# On Windows cmd:
+# copy .env.example backend\.env
 ```
 
-Review and adjust any desired variables in `backend/.env`.
-
----
-
-### 3. Backend Setup
-
+#### 3. Backend Setup
 ```bash
 cd backend
 
-# Create virtual environment
+# Create & activate virtual environment
 python -m venv .venv
 
-# Activate virtual environment
 # Windows:
 .venv\Scripts\activate
 # macOS/Linux:
 source .venv/bin/activate
 
-# Install pinned dependencies
+# Install dependencies
 pip install -r requirements.txt
 
 # Start the FastAPI server
 python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
+API docs available at `http://127.0.0.1:8000/docs`.
 
-The backend API will be available at `http://127.0.0.1:8000` (interactive OpenAPI documentation at `/docs`).
-
----
-
-### 4. Frontend Setup
-
+#### 4. Frontend Setup
 In a new terminal window:
-
 ```bash
 cd frontend
-
-# Install node modules
 npm install
-
-# Start Vite dev server
 npm run dev
 ```
-
-Open your browser to `http://localhost:5173`.
-
----
-
-### ⚡ One-Click Startup (Windows)
-
-From the project root directory (`Rag_ChatBot`):
-
-```powershell
-.\start_all.bat
-```
-
-To stop all background processes:
-```powershell
-.\stop_all.bat
-```
-
-> [!TIP]
-> Ensure your terminal is in the repository root folder (`./Rag_ChatBot`) before running `.\start_all.bat`.
+Open `http://localhost:5173` in your browser.
 
 ---
 
