@@ -18,10 +18,12 @@ class WebSearchEngine:
         # Remove common conversational prefixes
         patterns = [
             r'^(can you|could you|please|kindly)?\s*(do a\s+)?(search(\s+the|\s+on|\s+for|\s+web)*\s*:?\s*)',
-            r'^(what is|who is|tell me about|find info on|look up|give me information on)\s+'
+            r'^(what is|who is|which is|when was|when is|who was|tell me about|find info on|look up|give me information on)\s+'
         ]
         for pattern in patterns:
             cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE).strip()
+
+        cleaned = cleaned.rstrip('?.!').strip()
 
         # If stripping emptied the query, fallback to original
         return cleaned if len(cleaned) > 2 else query

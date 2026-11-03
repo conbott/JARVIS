@@ -26,7 +26,9 @@ def is_datetime_query(query: str) -> bool:
     """
     q = query.lower().strip()
     datetime_patterns = [
-        r'\b(what day is it|what is today|what\'s the date|current date|today\'s date|what time is it|current time|correct time)\b'
+        r'\b(what day is it|what is today|what\'s the date|what is the date|what is today\'s date|what is the date today|the date today|current date|today\'s date|what time is it|current time|correct time|time now|date now)\b',
+        r'\bwhat\s+(is|are)\s+(the\s+)?(date|day|time)\b',
+        r'\b(date\s+today|today\s+date)\b'
     ]
     for pattern in datetime_patterns:
         if re.search(pattern, q):
@@ -116,15 +118,18 @@ Rules:
 """
 
 SYSTEM_PROMPT_SEARCH = """You are an advanced, helpful AI Assistant equipped with live web search results.
+Current System Context:
+- Today's Date & Time: {current_time}
 
-STRICT FACTUAL GROUNDING RULES:
-1. ONLY state facts explicitly written in the provided Search Sources.
-2. NEVER guess, extrapolate, or invent dates, release times, version numbers, or creator names.
-3. If an exact release date or detail is NOT explicitly stated in the search snippets, you MUST state clearly: "The exact release date is not stated in the search results."
-4. If a creator/developer name is mentioned, accurately report the developer stated in the sources. If community forks or GitHub repositories are mentioned, distinguish between the original creator and repository contributors.
-5. NO FAKE CITATIONS: When asked to double-check or challenged by the user, critically inspect ONLY the actual text in the provided snippets. Never invent fake quotes, fake patch notes, or claim a source says something it does not.
-6. Include clickable markdown links to sources when relevant (e.g. [Source Title](URL)).
-7. Structure your response with clean headings or bullet points.
+FACTUAL GROUNDING & SYNTHESIS RULES:
+1. Ground your answer in facts explicitly mentioned in the provided Search Sources.
+2. If the user asks about today's date, time, or current year, refer to the Current System Context above. Never invent placeholder brackets like [insert today's date].
+3. Report whatever relevant information is present in the snippets (titles, dates, release years, version numbers, changelogs, creator/lead dev names).
+4. Distinguish between an overall project/game release (e.g. original launch year) and incremental patch updates (e.g. version 3.7.1) if both appear.
+5. If a very specific detail (such as the exact day a minor patch was uploaded) is not visible in the preview snippets, state naturally what is known from the sources and note that the specific patch date isn't visible in the snippet previews. Never invent dates.
+6. When asked to double-check or challenged, re-verify the sources carefully. Never invent fake quotes or fake patch notes.
+7. Include clickable markdown links to sources when relevant (e.g. [Source Title](URL)).
+8. Structure your response with clean headings or bullet points.
 """
 
 class RAGPipeline:
@@ -153,6 +158,9 @@ class RAGPipeline:
             f"Given the conversation history and the latest user question, rephrase the user question "
             f"into a single, self-contained search query that replaces pronouns ('it', 'its', 'that') with "
             f"the actual entity name mentioned in the history.\n"
+            f"Rules for rephrasing:\n"
+            f"- If the user asks about origin, creator, or initial release ('when was it first released', 'who made it'), use the core subject/game/project name (e.g. 'Pokemon Fire Ash first release date'), NOT a specific sub-version or patch number.\n"
+            f"- Keep it concise and keyword-focused for search engines.\n"
             f"Output ONLY the standalone rephrased search query. Do not add quotes, explanations, or punctuation at the start.\n\n"
             f"Conversation History:\n{history_text}\n\n"
             f"User Question: {query}\n"
