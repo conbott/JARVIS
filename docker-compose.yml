@@ -1,0 +1,21 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-chatbot-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - CHROMA_PERSIST_DIRECTORY=./chroma_db
+      - LLM_MODEL=qwen2.5-coder:7b
+      - EMBEDDING_MODEL=qwen3-embedding:0.6b
+      - SIMILARITY_THRESHOLD=0.35
+      - OLLAMA_NUM_CTX=4096
+    volumes:
+      - ./backend/data:/app/data
+      - ./chroma_db:/app/chroma_db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

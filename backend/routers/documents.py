@@ -6,7 +6,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pypdf import PdfReader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from config import settings
 from core.vectorstore import vector_store_manager
 
@@ -45,22 +45,27 @@ async def upload_document(file: UploadFile = File(...)):
         extracted_docs: List[Document] = []
 
         if ext == ".pdf":
-            reader = PdfReader(temp_path)
-            for page_num, page in enumerate(reader.pages, start=1):
-                page_text = page.extract_text() or ""
-                if page_text.strip():
-                    extracted_docs.append(Document(
-                        page_content=page_text,
-                        metadata={"source": filename, "page": page_num}
-                    ))
+            loader = PyPDFLoader(temp_path)
+            raw_docs = loader.load()
+            for d in raw_docs:
+                if d.page_content.strip():
+                    raw_page = d.metadata.get("page", 0)
+                    page_num = raw_page + 1 if isinstance(raw_page, int) else 1
+                    d.metadata = {
+                        "source": filename,
+                        "page": page_num
+                    }
+                    extracted_docs.append(d)
         else:
-            with open(temp_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-                if content.strip():
-                    extracted_docs.append(Document(
-                        page_content=content,
-                        metadata={"source": filename, "page": 1}
-                    ))
+            loader = TextLoader(temp_path, encoding="utf-8")
+            raw_docs = loader.load()
+            for d in raw_docs:
+                if d.page_content.strip():
+                    d.metadata = {
+                        "source": filename,
+                        "page": 1
+                    }
+                    extracted_docs.append(d)
 
         if not extracted_docs:
             raise HTTPException(status_code=400, detail="Could not extract any readable text from the document.")
