@@ -483,7 +483,7 @@ export default function App() {
             m.id === assistantMsgId
               ? {
                   ...m,
-                  content: `⚠️ **Error generating response:** ${error.message || 'Unknown network error'}.`,
+                  content: `**Error generating response:** ${error.message || 'Unknown network error'}.`,
                 }
               : m
           )

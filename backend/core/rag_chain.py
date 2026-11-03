@@ -212,7 +212,7 @@ class RAGPipeline:
             })}\n\n"
             
             now = datetime.now()
-            time_resp = f"📅 **Today is {now.strftime('%A, %B %d, %Y')}**.\n\n⏰ The current local time is **{now.strftime('%I:%M:%S %p')}**."
+            time_resp = f"**Today is {now.strftime('%A, %B %d, %Y')}**.\n\nThe current local time is **{now.strftime('%I:%M:%S %p')}**."
             for word in time_resp.split(" "):
                 yield f"data: {json.dumps({'type': 'token', 'content': word + ' '})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"

@@ -180,7 +180,8 @@ class UnifiedLLMClient:
                             logger.error(f"Ollama chat error status {response.status_code}: {error_text}")
                             if response.status_code == 404 or "not found" in error_text.lower():
                                 yield (
-                                    f"⚠️ **Model '{self.model_name}' Not Found:** It looks like this model has not been downloaded yet.\n\n"
+                                    f"**Notice: Model '{self.model_name}' Not Found**\n\n"
+                                    f"It looks like this model has not been downloaded yet.\n\n"
                                     f"Please open your terminal and run:\n"
                                     f"```bash\nollama pull {self.model_name}\n```\n"
                                     f"*(Or open the **System Panel** in the top right to select an already installed model)*"
@@ -205,7 +206,7 @@ class UnifiedLLMClient:
                 except Exception as e:
                     err_str = str(e).lower()
                     if "429" in err_str or "rate" in err_str:
-                        yield "\n\n⚠️ **Rate Limit Exceeded:** Local service request limit reached. Please wait a moment."
+                        yield "\n\n**Rate Limit Exceeded:** Local service request limit reached. Please wait a moment."
                     else:
                         logger.error(f"Error streaming from Ollama: {e}")
                         yield f"\n[LLM Connection Error: Ensure Ollama is running at {settings.OLLAMA_BASE_URL}]"
@@ -260,21 +261,21 @@ class UnifiedLLMClient:
 
             if "429" in err_lower or "resourceexhausted" in err_lower or "rate limit" in err_lower or "quota" in err_lower:
                 yield (
-                    "\n\n⚠️ **Rate Limit / Quota Exceeded (HTTP 429):** The provider reported that rate limits or quotas "
+                    "\n\n**Rate Limit / Quota Exceeded (HTTP 429):** The provider reported that rate limits or quotas "
                     f"have been exceeded for '{self.model_name}'. Please wait a moment or check your billing plan."
                 )
             elif "401" in err_lower or "unauthorized" in err_lower or "invalid api key" in err_lower or "api_key" in err_lower:
                 yield (
-                    f"\n\n⚠️ **Authentication Error:** The API key for provider '{provider}' is missing or invalid. "
+                    f"\n\n**Authentication Error:** The API key for provider '{provider}' is missing or invalid. "
                     "Please verify your credentials in your environment configuration (.env)."
                 )
             elif "not found" in err_lower or "invalid_argument" in err_lower or "model" in err_lower:
                 yield (
-                    f"\n\n⚠️ **Model Error:** The model name '{self.model_name}' was rejected or not found by {provider}. "
+                    f"\n\n**Model Error:** The model name '{self.model_name}' was rejected or not found by {provider}. "
                     f"Please verify LLM_MODEL in your .env or choose an active model. (Details: {err_msg})"
                 )
             else:
-                yield f"\n\n⚠️ **AI Provider Error ({provider}):** {err_msg}"
+                yield f"\n\n**AI Provider Error ({provider}):** {err_msg}"
 
     async def generate_response(
         self,

@@ -1,4 +1,4 @@
-# 🌿 Local RAG & Voice Assistant
+# Local RAG & Voice Assistant
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.162.0-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-19.2.4-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
@@ -12,7 +12,7 @@ A private, offline-capable, full-stack **Local RAG & Voice Assistant** built wit
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 <!-- Place screenshots or recording demos below -->
 > [!NOTE]
@@ -23,15 +23,15 @@ A private, offline-capable, full-stack **Local RAG & Voice Assistant** built wit
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 1. **Claude-Style Nature Green Dark Palette**:
    - Modern dark theme tinted in natural green tones (`#121813`, `#1a221b`, `#a8d5a2`).
    - Clean centered chat column (720px), elegant typography with serif response text, right-aligned user bubbles, and responsive drawers.
 2. **Hybrid RAG Routing & Search Modes**:
-   - **⚡ Auto Mode**: Fast-paths casual small talk to direct LLM generation; detects summary requests to run full-document spread retrieval; evaluates specific queries against a `0.35` similarity threshold; falls back gracefully to live DuckDuckGo web search when similarity is low or external info is needed.
-   - **🌐 Web Mode**: Direct live web search queries with source URLs and real-time snippets.
-   - **📄 Docs Mode**: Strict document grounding in local vector collections without external search.
+   - **Auto Mode**: Fast-paths casual small talk to direct LLM generation; detects summary requests to run full-document spread retrieval; evaluates specific queries against a `0.35` similarity threshold; falls back gracefully to live DuckDuckGo web search when similarity is low or external info is needed.
+   - **Web Mode**: Direct live web search queries with source URLs and real-time snippets.
+   - **Docs Mode**: Strict document grounding in local vector collections without external search.
 3. **Smart Ingestion & Retrieval**:
    - Ingests PDFs and text documents using LangChain document loaders (`PyPDFLoader`, `TextLoader`) with 1-based page metadata and recursive character chunking (800 chars / 150 overlap).
    - **Spread Retrieval**: Skips dense citation lists and reference sections, guarantees inclusion of the abstract and conclusion chunks, and uniformly samples across the corpus for comprehensive document overviews.
@@ -46,7 +46,7 @@ A private, offline-capable, full-stack **Local RAG & Voice Assistant** built wit
 
 ---
 
-## 🏛️ System Architecture
+## System Architecture
 
 ```mermaid
 graph TD
@@ -90,7 +90,7 @@ graph TD
 
 ---
 
-## 🔄 End-to-End Workflow
+## End-to-End Workflow
 
 ```
 [Ingest]    PDF / Text ──> LangChain Loaders ──> Recursive Splitter ──> Embeddings ──> ChromaDB
@@ -112,7 +112,7 @@ graph TD
 
 ---
 
-## 📋 Prerequisites
+## Prerequisites
 
 - **[Ollama](https://ollama.ai)** installed and running locally (for local mode).
 - **Python 3.10+** (tested on Python 3.11/3.12).
@@ -121,9 +121,9 @@ graph TD
 
 ---
 
-## 🚀 Quickstart & Installation
+## Quickstart & Installation
 
-### ⚡ Option A: One-Click Setup (Windows)
+### Option A: One-Click Setup (Windows)
 
 If you are on Windows, the entire application can be set up and launched with two scripts:
 
@@ -135,7 +135,7 @@ If you are on Windows, the entire application can be set up and launched with tw
    *This automatically creates `backend\.env`, provisions the Python `.venv`, installs all backend packages, and installs frontend node modules.*
 
 2. **Pull the Required Models**:
-   Open a terminal and pull your preferred model (see the [Hardware Guide](#-hardware--model-selection-guide) below):
+   Open a terminal and pull your preferred model (see the [Hardware Guide](#hardware--model-selection-guide) below):
    ```bash
    # Default LLM (7B parameters)
    ollama pull qwen2.5-coder:7b
@@ -153,7 +153,7 @@ If you are on Windows, the entire application can be set up and launched with tw
 
 ---
 
-### 🧠 Hardware & Model Selection Guide
+### Hardware & Model Selection Guide
 
 Jarvis dynamically inspects your host machine's hardware on startup and provides tailored model recommendations in the **System & Environment** panel:
 
@@ -169,7 +169,7 @@ Jarvis dynamically inspects your host machine's hardware on startup and provides
 
 ---
 
-### 🛠️ Option B: Manual Setup (macOS / Linux / Windows)
+### Option B: Manual Setup (macOS / Linux / Windows)
 
 #### 1. Pull Ollama Models
 Ensure Ollama is running (`ollama serve`), then pull the required models:
@@ -217,7 +217,7 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## 🐳 Docker Deployment (Backend) *(Provided, not tested locally)*
+## Docker Deployment (Backend) *(Provided, not tested locally)*
 
 You can run the backend inside Docker while connecting to Ollama running on your host machine:
 
@@ -230,7 +230,7 @@ The container maps port `8000` and configures `host.docker.internal:11434` to co
 
 ---
 
-## 🚀 Deployment Guide (Hosted / Cloud Mode)
+## Deployment Guide (Hosted / Cloud Mode)
 
 The architecture supports complete serverless cloud deployment by setting a few environment variables:
 
@@ -273,7 +273,7 @@ Deploy the `/frontend` directory to Vercel:
 
 ---
 
-## ⚙️ Configuration Reference
+## Configuration Reference
 
 The following environment variables can be configured in `.env`:
 
@@ -301,7 +301,7 @@ The following environment variables can be configured in `.env`:
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Rag_ChatBot/
@@ -343,7 +343,7 @@ Rag_ChatBot/
 
 ---
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 1. **Local Model Hardware Requirements**: Running `qwen2.5-coder:7b` with a 4096-token context window performs best with at least 6GB-8GB of dedicated VRAM. For systems with lower VRAM, consider switching to `llama3.2:3b`.
 2. **Speech-to-Text (STT) Processing**: Voice recording captures audio using the standard browser `MediaRecorder` API and transcribes it on backend CPU with `faster-whisper`. When deployed to low-spec cloud instances or serverless hosts without PyAV/Torch, set `STT_ENABLED=false` to prevent importing STT dependencies and conserve compute.
@@ -352,6 +352,6 @@ Rag_ChatBot/
 
 ---
 
-## 📄 License
+## License
 
 MIT License. Open for educational, personal, and commercial development.
