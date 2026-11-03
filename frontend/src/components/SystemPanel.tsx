@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Cpu, Database, Cloud, Radio, Volume2, ShieldCheck, ChevronDown } from 'lucide-react';
+import { X, Cpu, Database, Cloud, Radio, Volume2, ShieldCheck, ChevronDown, Server } from 'lucide-react';
 import type { HealthStatus, DocumentStats, VoiceOption } from '../types';
 
 interface SystemPanelProps {
@@ -27,6 +27,10 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
   const vram = health?.device_info?.vram_gb ? `${health.device_info.vram_gb} GB` : 'System RAM';
   const isGpu = health?.device_info?.is_gpu ?? true;
   const chunkCount = stats?.total_chunks ?? 0;
+  const isHosted = health?.hosted || (health?.provider && health.provider !== 'ollama');
+  const providerName = health?.provider || 'ollama';
+  const modelName = health?.model || health?.llm_model || 'qwen2.5-coder:7b';
+  const vectorBackend = health?.vector_backend || 'chroma';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -55,31 +59,53 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
           </div>
 
           <div className="mt-5 space-y-6 text-xs">
-            {/* Compute & Hardware */}
+            {/* Compute & Runtime Engine */}
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] mb-2">
                 Compute Engine
               </div>
               <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-muted)] flex items-center gap-1.5">
-                    <Cpu className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-                    Device
-                  </span>
-                  <span className="font-mono text-[var(--color-text)] text-[11px] text-right truncate max-w-[160px]">
-                    {hardware}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-muted)]">Memory Allocation</span>
-                  <span className="font-mono text-[var(--color-text)] text-[11px]">{vram}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-muted)]">Acceleration</span>
-                  <span className="text-[11px] text-[var(--color-accent)] font-medium">
-                    {isGpu ? 'NVIDIA CUDA (Active)' : 'CPU Direct'}
-                  </span>
-                </div>
+                {isHosted ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[var(--color-muted)] flex items-center gap-1.5">
+                        <Server className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                        Runtime Mode
+                      </span>
+                      <span className="font-mono text-[var(--color-text)] text-[11px] text-right truncate">
+                        API · {providerName} · {modelName}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[var(--color-muted)]">Provider</span>
+                      <span className="font-mono text-[var(--color-accent)] text-[11px] font-medium capitalize">
+                        {providerName} Hosted API
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[var(--color-muted)] flex items-center gap-1.5">
+                        <Cpu className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                        Device
+                      </span>
+                      <span className="font-mono text-[var(--color-text)] text-[11px] text-right truncate max-w-[160px]">
+                        {hardware}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[var(--color-muted)]">Memory Allocation</span>
+                      <span className="font-mono text-[var(--color-text)] text-[11px]">{vram}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[var(--color-muted)]">Acceleration</span>
+                      <span className="text-[11px] text-[var(--color-accent)] font-medium">
+                        {isGpu ? 'NVIDIA CUDA (Active)' : 'CPU Direct'}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -94,14 +120,14 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
                     <Radio className="w-3.5 h-3.5 text-[var(--color-accent)]" />
                     LLM Model
                   </span>
-                  <span className="font-mono text-[var(--color-text)] text-[11px]">
-                    {health?.llm_model || 'qwen2.5-coder:7b'}
+                  <span className="font-mono text-[var(--color-text)] text-[11px] truncate max-w-[160px]">
+                    {modelName}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[var(--color-muted)]">Embeddings</span>
-                  <span className="font-mono text-[var(--color-text)] text-[11px]">
-                    {health?.embedding_model || 'bge-small-en-v1.5'}
+                  <span className="font-mono text-[var(--color-text)] text-[11px] truncate max-w-[160px]">
+                    {health?.embedding_model || 'qwen3-embedding:0.6b'}
                   </span>
                 </div>
               </div>
@@ -116,21 +142,29 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-[var(--color-muted)] flex items-center gap-1.5">
                     <Database className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-                    ChromaDB (Local)
+                    Primary Backend
                   </span>
+                  <span className="font-mono text-[var(--color-text)] text-[11px] font-medium capitalize">
+                    {vectorBackend === 'pinecone' ? 'Pinecone (Cloud)' : 'ChromaDB (Local)'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[var(--color-muted)]">Indexed Chunks</span>
                   <span className="font-mono text-[var(--color-text)] text-[11px]">
                     {chunkCount} {chunkCount === 1 ? 'Chunk' : 'Chunks'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[var(--color-muted)] flex items-center gap-1.5">
-                    <Cloud className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-                    Pinecone (Cloud)
-                  </span>
-                  <span className="font-mono text-[var(--color-text)] text-[11px]">
-                    {health?.cloud_sync_target?.index || 'attention-paper'}
-                  </span>
-                </div>
+                {vectorBackend !== 'pinecone' && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--color-muted)] flex items-center gap-1.5">
+                      <Cloud className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+                      Pinecone Sync Target
+                    </span>
+                    <span className="font-mono text-[var(--color-text)] text-[11px]">
+                      {health?.cloud_sync_target?.index || 'attention-paper'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -164,14 +198,14 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
               </div>
             </div>
 
-            {/* Architecture Note */}
+            {/* Retrieval Pipeline */}
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)] mb-2">
                 Retrieval Pipeline
               </div>
               <div className="p-3 rounded-xl bg-[var(--color-surface-2)] border border-[var(--color-border)] text-[11px] text-[var(--color-muted)] leading-relaxed space-y-1.5">
                 <p>
-                  <span className="text-[var(--color-text)] font-medium">Smart RAG:</span> Checks local ChromaDB cosine similarity threshold (0.45).
+                  <span className="text-[var(--color-text)] font-medium">Smart RAG:</span> Checks {vectorBackend === 'pinecone' ? 'Pinecone' : 'ChromaDB'} cosine similarity threshold (0.35).
                 </p>
                 <p>
                   <span className="text-[var(--color-warn)] font-medium">Fallback:</span> Automatically switches to live DuckDuckGo web search if document confidence is low or real-time external info is needed.
@@ -185,7 +219,7 @@ export const SystemPanel: React.FC<SystemPanelProps> = ({
         <div className="pt-6 border-t border-[var(--color-border)] flex items-center justify-between text-[11px] text-[var(--color-muted)]">
           <span className="flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-[var(--color-accent)]" />
-            Local-First Private Execution
+            {isHosted ? `Hosted API (${providerName})` : 'Local-First Private Execution'}
           </span>
           <span className="font-mono">v2.0</span>
         </div>

@@ -2,7 +2,7 @@ import os
 import shutil
 import logging
 from typing import Optional, List
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Header, HTTPException
 from pydantic import BaseModel
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -19,9 +19,14 @@ class SyncPineconeRequest(BaseModel):
     index_name: Optional[str] = None
 
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(
+    file: UploadFile = File(...),
+    x_session_id: Optional[str] = Header(None, alias="X-Session-Id")
+):
     """
-    Accepts PDF, TXT, or MD documents, splits into chunks, and saves to local ChromaDB.
+    Accepts PDF, TXT, or MD documents, splits into chunks, and saves to configured vector store
+    (ChromaDB or direct to Pinecone).
+    Enforces MAX_UPLOAD_MB upload limits.
     """
     allowed_extensions = [".pdf", ".txt", ".md"]
     filename = file.filename or "uploaded_doc"
@@ -33,14 +38,26 @@ async def upload_document(file: UploadFile = File(...)):
             detail=f"Unsupported file format '{ext}'. Supported formats: {allowed_extensions}"
         )
 
-    # Save uploaded file to temp directory
+    # Check file size limit if configured
+    max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
     temp_dir = "./temp_uploads"
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, filename)
 
+    total_read = 0
     try:
         with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            while True:
+                chunk = await file.read(1024 * 64)
+                if not chunk:
+                    break
+                total_read += len(chunk)
+                if settings.MAX_UPLOAD_MB > 0 and total_read > max_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File exceeds maximum upload size of {settings.MAX_UPLOAD_MB} MB."
+                    )
+                buffer.write(chunk)
 
         extracted_docs: List[Document] = []
 
@@ -78,17 +95,22 @@ async def upload_document(file: UploadFile = File(...)):
         )
         split_chunks = splitter.split_documents(extracted_docs)
 
-        # Store in local ChromaDB
-        added_count = vector_store_manager.add_documents(split_chunks)
+        # Store in vector backend (ChromaDB or Pinecone)
+        added_count = vector_store_manager.add_documents(split_chunks, session_id=x_session_id)
+        backend_name = "Pinecone" if vector_store_manager.vector_backend == "pinecone" else "ChromaDB"
 
         return {
             "success": True,
             "filename": filename,
             "chunks_added": added_count,
             "pages_parsed": len(extracted_docs),
-            "message": f"Successfully indexed '{filename}' into local ChromaDB ({added_count} chunks)."
+            "vector_backend": vector_store_manager.vector_backend,
+            "namespace": x_session_id if vector_store_manager.vector_backend == "pinecone" else None,
+            "message": f"Successfully indexed '{filename}' into {backend_name} ({added_count} chunks)."
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -100,11 +122,11 @@ async def upload_document(file: UploadFile = File(...)):
                 pass
 
 @router.get("/stats")
-async def get_document_stats():
+async def get_document_stats(x_session_id: Optional[str] = Header(None, alias="X-Session-Id")):
     """
-    Returns current count of chunks and list of indexed documents in local ChromaDB.
+    Returns current count of chunks and list of indexed documents in active vector store.
     """
-    return vector_store_manager.get_stats()
+    return vector_store_manager.get_stats(session_id=x_session_id)
 
 @router.post("/sync-pinecone")
 async def sync_pinecone_endpoint(request: SyncPineconeRequest):
@@ -120,11 +142,12 @@ async def sync_pinecone_endpoint(request: SyncPineconeRequest):
     return result
 
 @router.delete("/clear")
-async def clear_documents():
+async def clear_documents(x_session_id: Optional[str] = Header(None, alias="X-Session-Id")):
     """
-    Wipes the local ChromaDB vector collection.
+    Wipes the active vector collection/namespace.
     """
-    success = vector_store_manager.clear_documents()
+    success = vector_store_manager.clear_documents(session_id=x_session_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to clear vector store.")
-    return {"success": True, "message": "Local ChromaDB collection cleared successfully."}
+    backend_name = "Pinecone namespace" if vector_store_manager.vector_backend == "pinecone" else "ChromaDB collection"
+    return {"success": True, "message": f"{backend_name} cleared successfully."}

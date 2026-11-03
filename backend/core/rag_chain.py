@@ -176,7 +176,8 @@ class RAGPipeline:
         self,
         query: str,
         chat_history: Optional[List[Dict[str, str]]] = None,
-        search_mode: str = "auto"
+        search_mode: str = "auto",
+        session_id: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
         """
         Processes user query through the Dual RAG + Web Search pipeline.
@@ -239,7 +240,7 @@ class RAGPipeline:
             yield f"data: {json.dumps({'type': 'status', 'message': 'Resolving conversation context...'})}\n\n"
             standalone_query = await self.reformulate_query(query, chat_history)
 
-        stats = vector_store_manager.get_stats()
+        stats = vector_store_manager.get_stats(session_id=session_id)
         total_chunks = stats.get("total_chunks", 0)
 
         sources: List[Dict[str, Any]] = []
@@ -300,7 +301,7 @@ class RAGPipeline:
             fallback_reason = None
             best_score = 1.0  # Intentional multi-page corpus synthesis
             yield f"data: {json.dumps({'type': 'status', 'message': 'Synthesizing document overview across pages...'})}\n\n"
-            spread_docs = vector_store_manager.get_spread_chunks(limit=8)
+            spread_docs = vector_store_manager.get_spread_chunks(limit=8, session_id=session_id)
             context_blocks = []
             for doc, sc in spread_docs:
                 src_name = doc.metadata.get("source", "Uploaded Document")
@@ -325,10 +326,11 @@ class RAGPipeline:
 
         # MODE: Forced Documents Only
         elif search_mode == "docs":
-            yield f"data: {json.dumps({'type': 'status', 'message': 'Searching uploaded documents in ChromaDB...'})}\n\n"
+            backend_name = "Pinecone" if vector_store_manager.vector_backend == "pinecone" else "ChromaDB"
+            yield f"data: {json.dumps({'type': 'status', 'message': f'Searching uploaded documents in {backend_name}...'})}\n\n"
             if total_chunks > 0:
                 retrieval = "similarity"
-                doc_results = vector_store_manager.search_with_scores(standalone_query, k=settings.SIMILARITY_K)
+                doc_results = vector_store_manager.search_with_scores(standalone_query, k=settings.SIMILARITY_K, session_id=session_id)
                 if doc_results:
                     path = "document"
                     source_type = "document"
@@ -354,7 +356,7 @@ class RAGPipeline:
         else:
             if total_chunks > 0:
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Checking uploaded documents...'})}\n\n"
-                doc_results = vector_store_manager.search_with_scores(standalone_query, k=settings.SIMILARITY_K)
+                doc_results = vector_store_manager.search_with_scores(standalone_query, k=settings.SIMILARITY_K, session_id=session_id)
                 if doc_results:
                     raw_best = float(max([s for _, s in doc_results]))
                     best_score = round(raw_best, 3)

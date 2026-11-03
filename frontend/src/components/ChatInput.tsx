@@ -20,6 +20,7 @@ interface ChatInputProps {
   onSearchModeChange: (mode: SearchMode) => void;
   onStopAudio?: () => void;
   stats?: DocumentStats | null;
+  sttEnabled?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -30,6 +31,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onSearchModeChange,
   onStopAudio,
   stats,
+  sttEnabled = true,
 }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -297,15 +299,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         ) : (
           /* Normal Textarea Row */
           <div className="flex items-end gap-2">
-            {/* Mic Push-to-Talk Button */}
-            <button
-              onClick={toggleMic}
-              disabled={isLoading}
-              title="Speak message (Whisper STT)"
-              className="p-2 rounded-xl text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition shrink-0 cursor-pointer disabled:opacity-40"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
+            {/* Mic Push-to-Talk Button (hidden when STT is disabled) */}
+            {sttEnabled !== false && (
+              <button
+                onClick={toggleMic}
+                disabled={isLoading}
+                title="Speak message (Whisper STT)"
+                className="p-2 rounded-xl text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-2)] transition shrink-0 cursor-pointer disabled:opacity-40"
+              >
+                <Mic className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Auto-resizing Textarea */}
             <textarea

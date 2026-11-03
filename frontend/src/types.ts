@@ -48,6 +48,12 @@ export interface DeviceInfo {
 
 export interface HealthStatus {
   status: string;
+  provider?: string;
+  model?: string;
+  embedding_provider?: string;
+  vector_backend?: string;
+  stt_enabled?: boolean;
+  hosted?: boolean;
   ollama_online: boolean;
   llm_model: string;
   embedding_model: string;
@@ -56,6 +62,7 @@ export interface HealthStatus {
     type: string;
     total_chunks: number;
     documents: string[];
+    collection?: string;
   };
   cloud_sync_target: {
     type: string;

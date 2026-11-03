@@ -27,7 +27,6 @@ def is_reference_chunk(text: str) -> bool:
     has_proc = "in proc." in t_lower or "in proceedings" in t_lower or "advances in neural" in t_lower
     et_als = len(re.findall(r'\bet\s+al\.?', text, flags=re.IGNORECASE))
 
-    # Multiple bracketed citations with publication markers
     if len(citations) >= 3 and (has_arxiv or has_proc):
         return True
     if len(citations) >= 2 and has_arxiv and et_als >= 2:
@@ -48,53 +47,200 @@ def is_title_authors_chunk(text: str) -> bool:
 class VectorStoreManager:
     def __init__(self):
         self.persist_directory = os.path.abspath(settings.CHROMA_PERSIST_DIR)
-        self.collection_name = settings.COLLECTION_NAME
         self._chroma: Optional[Chroma] = None
+        self._pinecone_index: Optional[Any] = None
+
+    @property
+    def vector_backend(self) -> str:
+        return settings.VECTOR_BACKEND
+
+    @property
+    def chroma_collection_name(self) -> str:
+        return embedding_engine.collection_name
 
     @property
     def chroma(self) -> Chroma:
-        if self._chroma is None:
+        coll_name = self.chroma_collection_name
+        if self._chroma is None or getattr(self._chroma, "_collection_name", None) != coll_name:
             os.makedirs(self.persist_directory, exist_ok=True)
-            logger.info(f"Connecting to ChromaDB at: {self.persist_directory}")
-            self._chroma = Chroma(
-                collection_name=self.collection_name,
-                embedding_function=embedding_engine.client,
-                persist_directory=self.persist_directory,
-            )
+            logger.info(f"Connecting to ChromaDB collection '{coll_name}' at: {self.persist_directory}")
+            try:
+                self._chroma = Chroma(
+                    collection_name=coll_name,
+                    embedding_function=embedding_engine.client,
+                    persist_directory=self.persist_directory,
+                )
+                self._chroma._collection_name = coll_name
+            except Exception as e:
+                logger.error(f"Error initializing ChromaDB: {e}")
+                raise ValueError(f"Vector database initialization error: {e}")
         return self._chroma
 
-    def add_documents(self, documents: List[Document]) -> int:
+    def _get_pinecone_index(self):
+        if not settings.PINECONE_API_KEY:
+            raise ValueError("PINECONE_API_KEY is not set. Please provide it in .env to use Pinecone vector backend.")
+        if self._pinecone_index is None:
+            from pinecone import Pinecone
+            pc = Pinecone(api_key=settings.PINECONE_API_KEY)
+            existing = [i.name for i in pc.list_indexes()]
+            if settings.PINECONE_INDEX_NAME not in existing:
+                raise ValueError(
+                    f"Pinecone index '{settings.PINECONE_INDEX_NAME}' was not found. Existing indexes: {existing}"
+                )
+            self._pinecone_index = pc.Index(settings.PINECONE_INDEX_NAME)
+        return self._pinecone_index
+
+    def add_documents(self, documents: List[Document], session_id: Optional[str] = None) -> int:
         """
-        Adds split document chunks into local ChromaDB.
+        Adds split document chunks into either local ChromaDB or Pinecone cloud.
+        Assigns deterministic IDs (<doc_id>-<chunk_index>) and attaches source/page/chunk_index metadata.
         """
         if not documents:
             return 0
-        self.chroma.add_documents(documents)
-        logger.info(f"Added {len(documents)} chunks to local ChromaDB collection '{self.collection_name}'.")
-        return len(documents)
 
-    def search_with_scores(self, query: str, k: int = 4) -> List[Tuple[Document, float]]:
+        # Attach deterministic IDs and metadata
+        deterministic_ids = []
+        for idx, doc in enumerate(documents):
+            source_file = os.path.basename(doc.metadata.get("source", "document"))
+            clean_source = re.sub(r'[^a-zA-Z0-9_-]', '_', source_file)
+            chunk_id = f"{clean_source}-{idx}"
+            deterministic_ids.append(chunk_id)
+            doc.metadata["chunk_index"] = idx
+            doc.metadata["doc_id"] = clean_source
+            if "source" not in doc.metadata:
+                doc.metadata["source"] = source_file
+            if "page" not in doc.metadata:
+                doc.metadata["page"] = 1
+
+        if self.vector_backend == "pinecone":
+            namespace = session_id or "default"
+            logger.info(f"Adding {len(documents)} chunks directly to Pinecone index '{settings.PINECONE_INDEX_NAME}' (namespace='{namespace}')")
+            try:
+                from langchain_pinecone import PineconeVectorStore
+                pc_index = self._get_pinecone_index()
+                vector_store = PineconeVectorStore(
+                    index=pc_index,
+                    embedding=embedding_engine.client,
+                    namespace=namespace
+                )
+                vector_store.add_documents(documents=documents, ids=deterministic_ids, namespace=namespace)
+                return len(documents)
+            except Exception as e:
+                err_msg = str(e)
+                if "dimension" in err_msg.lower():
+                    raise ValueError(f"Pinecone dimension mismatch: {err_msg}")
+                logger.error(f"Pinecone add_documents error: {e}")
+                raise
+
+        # Default local ChromaDB
+        try:
+            self.chroma.add_documents(documents=documents, ids=deterministic_ids)
+            logger.info(f"Added {len(documents)} chunks to ChromaDB collection '{self.chroma_collection_name}'.")
+            return len(documents)
+        except Exception as e:
+            err_msg = str(e)
+            if "dimension" in err_msg.lower():
+                raise ValueError(
+                    f"Vector dimension mismatch in ChromaDB collection '{self.chroma_collection_name}': {err_msg}. "
+                    "Clear documents or switch EMBEDDING_MODEL."
+                )
+            logger.error(f"ChromaDB add_documents error: {e}")
+            raise
+
+    def search_with_scores(self, query: str, k: int = 4, session_id: Optional[str] = None) -> List[Tuple[Document, float]]:
         """
-        Performs similarity search with relevance scores.
-        Returns list of (Document, score) tuples.
+        Performs similarity search with relevance scores [0.0, 1.0].
         """
+        if self.vector_backend == "pinecone":
+            namespace = session_id or "default"
+            try:
+                from langchain_pinecone import PineconeVectorStore
+                pc_index = self._get_pinecone_index()
+                vector_store = PineconeVectorStore(
+                    index=pc_index,
+                    embedding=embedding_engine.client,
+                    namespace=namespace
+                )
+                return vector_store.similarity_search_with_relevance_scores(query, k=k, namespace=namespace)
+            except Exception as e:
+                logger.warning(f"Error during Pinecone similarity search: {e}")
+                return []
+
         try:
             return self.chroma.similarity_search_with_relevance_scores(query, k=k)
         except Exception as e:
-            logger.warning(f"Error during similarity search: {e}")
-            # Fallback to standard similarity search if relevance scores fail
-            docs = self.chroma.similarity_search(query, k=k)
-            return [(d, 0.7) for d in docs]
+            logger.warning(f"Error during ChromaDB similarity search: {e}")
+            try:
+                docs = self.chroma.similarity_search(query, k=k)
+                return [(d, 0.7) for d in docs]
+            except Exception as inner_err:
+                logger.error(f"Failed fallback similarity search: {inner_err}")
+                return []
 
-    def get_spread_chunks(self, limit: int = 8) -> List[Tuple[Document, float]]:
+    def get_spread_chunks(self, limit: int = 8, session_id: Optional[str] = None) -> List[Tuple[Document, float]]:
         """
         Retrieves up to `limit` chunks spread evenly across the indexed documents.
-        - Skips chunks that look like a reference list (many [n] citations, arXiv preprint, et al. density)
-        - Always includes the first content chunk after title/authors (abstract)
-        - Always includes the last non-reference chunk if present
-        - Fills the rest evenly across the corpus in page order
-        Returns list of (Document, score) where score is 1.0 (indicating full-corpus synthesis).
         """
+        if self.vector_backend == "pinecone":
+            namespace = session_id or "default"
+            try:
+                pc_index = self._get_pinecone_index()
+                stats = pc_index.describe_index_stats()
+                dim = stats.dimension or 1024
+                # Query with zero vector to fetch top chunks in namespace
+                query_res = pc_index.query(
+                    vector=[0.0] * dim,
+                    top_k=min(100, (stats.total_vector_count or 100)),
+                    include_metadata=True,
+                    namespace=namespace
+                )
+                matches = getattr(query_res, "matches", []) or []
+                if not matches:
+                    return []
+
+                items = []
+                for i, m in enumerate(matches):
+                    meta = m.metadata or {}
+                    text = meta.get("text") or meta.get("page_content") or ""
+                    page = meta.get("page", 1)
+                    try:
+                        page_num = int(page)
+                    except (ValueError, TypeError):
+                        page_num = 1
+                    source_name = str(meta.get("source", ""))
+                    chunk_idx = meta.get("chunk_index", i)
+                    items.append((source_name, page_num, chunk_idx, text, meta))
+
+                items.sort(key=lambda x: (x[0], x[1], x[2]))
+                content_items = [it for it in items if not is_reference_chunk(it[3])]
+                if not content_items:
+                    content_items = items
+
+                total_content = len(content_items)
+                if total_content <= limit:
+                    selected_items = content_items
+                else:
+                    first_idx = 0
+                    if total_content > 1 and is_title_authors_chunk(content_items[0][3]):
+                        first_idx = 1
+                    last_idx = total_content - 1
+                    middle_count = limit - 2
+                    pool_indices = list(range(first_idx + 1, last_idx))
+                    if len(pool_indices) <= middle_count:
+                        chosen_pool = pool_indices
+                    else:
+                        step = (len(pool_indices) - 1) / float(middle_count - 1) if middle_count > 1 else 0
+                        chosen_pool = [pool_indices[int(round(k * step))] for k in range(middle_count)]
+                        chosen_pool = sorted(list(dict.fromkeys(chosen_pool)))
+                    final_indices = sorted(list(dict.fromkeys([first_idx] + chosen_pool + [last_idx])))
+                    selected_items = [content_items[idx] for idx in final_indices]
+
+                return [(Document(page_content=it[3], metadata=it[4]), 1.0) for it in selected_items]
+            except Exception as e:
+                logger.error(f"Error retrieving Pinecone spread chunks: {e}")
+                return []
+
+        # Local ChromaDB spread retrieval
         try:
             collection = self.chroma._collection
             data = collection.get(include=["documents", "metadatas"])
@@ -112,28 +258,22 @@ class VectorStoreManager:
                 except (ValueError, TypeError):
                     page_num = 0
                 source_name = str(m.get("source", ""))
-                items.append((source_name, page_num, i, text, m))
+                chunk_idx = m.get("chunk_index", i)
+                items.append((source_name, page_num, chunk_idx, text, m))
 
-            # Sort by source name, then page number, then original order
             items.sort(key=lambda x: (x[0], x[1], x[2]))
-
-            # Filter out chunks that look like a reference list
             content_items = [it for it in items if not is_reference_chunk(it[3])]
             if not content_items:
-                content_items = items  # Fallback if all chunks were flagged
+                content_items = items
 
             total_content = len(content_items)
             if total_content <= limit:
                 selected_items = content_items
             else:
-                # Find first content chunk after title/authors (abstract)
                 first_content_idx = 0
                 if total_content > 1 and is_title_authors_chunk(content_items[0][3]):
                     first_content_idx = 1
-
-                # Last non-reference chunk
                 last_content_idx = total_content - 1
-
                 middle_count = limit - 2
                 pool_indices = list(range(first_content_idx + 1, last_content_idx))
                 if len(pool_indices) <= middle_count:
@@ -143,29 +283,46 @@ class VectorStoreManager:
                     chosen_pool = [pool_indices[int(round(k * step))] for k in range(middle_count)]
                     chosen_pool = sorted(list(dict.fromkeys(chosen_pool)))
 
-                final_indices = [first_content_idx] + chosen_pool + [last_content_idx]
-                final_indices = sorted(list(dict.fromkeys(final_indices)))
+                final_indices = sorted(list(dict.fromkeys([first_content_idx] + chosen_pool + [last_content_idx])))
                 selected_items = [content_items[idx] for idx in final_indices]
 
-            result: List[Tuple[Document, float]] = []
-            for it in selected_items:
-                _, _, _, text, m = it
-                doc = Document(page_content=text, metadata=m)
-                result.append((doc, 1.0))
-            return result
+            return [(Document(page_content=it[3], metadata=it[4]), 1.0) for it in selected_items]
         except Exception as e:
-            logger.error(f"Error retrieving spread chunks: {e}")
+            logger.error(f"Error retrieving ChromaDB spread chunks: {e}")
             return []
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Returns stats about local ChromaDB and unique indexed files.
+        Returns stats about active vector store (ChromaDB or Pinecone).
         """
+        if self.vector_backend == "pinecone":
+            namespace = session_id or "default"
+            try:
+                pc_index = self._get_pinecone_index()
+                desc = pc_index.describe_index_stats()
+                ns_data = desc.namespaces.get(namespace) if hasattr(desc, "namespaces") and desc.namespaces else None
+                vec_count = ns_data.vector_count if ns_data else (desc.total_vector_count or 0)
+                return {
+                    "total_chunks": vec_count,
+                    "document_count": 1 if vec_count > 0 else 0,
+                    "documents": [f"Pinecone Namespace: {namespace}"] if vec_count > 0 else [],
+                    "storage_type": "pinecone",
+                    "collection": settings.PINECONE_INDEX_NAME,
+                    "namespace": namespace
+                }
+            except Exception as e:
+                logger.error(f"Error fetching Pinecone stats: {e}")
+                return {
+                    "total_chunks": 0,
+                    "document_count": 0,
+                    "documents": [],
+                    "storage_type": "pinecone",
+                    "error": str(e)
+                }
+
         try:
             collection = self.chroma._collection
             count = collection.count()
-            
-            # Fetch all metadata to get list of unique file names
             results = collection.get(include=["metadatas"])
             filenames = set()
             if results and "metadatas" in results and results["metadatas"]:
@@ -178,7 +335,7 @@ class VectorStoreManager:
                 "document_count": len(filenames),
                 "documents": sorted(list(filenames)),
                 "storage_type": "local_chroma",
-                "collection": self.collection_name
+                "collection": self.chroma_collection_name
             }
         except Exception as e:
             logger.error(f"Error fetching Chroma stats: {e}")
@@ -186,13 +343,25 @@ class VectorStoreManager:
                 "total_chunks": 0,
                 "document_count": 0,
                 "documents": [],
+                "storage_type": "local_chroma",
                 "error": str(e)
             }
 
-    def clear_documents(self) -> bool:
+    def clear_documents(self, session_id: Optional[str] = None) -> bool:
         """
-        Deletes all entries from the local ChromaDB collection.
+        Clears documents from either ChromaDB or Pinecone namespace.
         """
+        if self.vector_backend == "pinecone":
+            namespace = session_id or "default"
+            try:
+                pc_index = self._get_pinecone_index()
+                pc_index.delete(delete_all=True, namespace=namespace)
+                logger.info(f"Cleared Pinecone vectors in namespace '{namespace}'.")
+                return True
+            except Exception as e:
+                logger.error(f"Error clearing Pinecone namespace '{namespace}': {e}")
+                return False
+
         try:
             self.chroma.delete_collection()
             self._chroma = None
@@ -227,7 +396,6 @@ class VectorStoreManager:
                     "message": f"Index '{idx}' not found in your Pinecone account. Existing indexes: {existing_indexes}"
                 }
 
-            # Retrieve all documents from local Chroma
             collection = self.chroma._collection
             data = collection.get(include=["documents", "metadatas"])
             raw_docs = data.get("documents", [])
@@ -243,7 +411,6 @@ class VectorStoreManager:
             for text, meta in zip(raw_docs, metas):
                 docs_to_sync.append(Document(page_content=text, metadata=meta or {}))
 
-            # Push to Pinecone
             logger.info(f"Syncing {len(docs_to_sync)} vectors to Pinecone index '{idx}'...")
             PineconeVectorStore.from_documents(
                 documents=docs_to_sync,
@@ -258,7 +425,6 @@ class VectorStoreManager:
                 "index_name": idx,
                 "message": f"Successfully synced {len(docs_to_sync)} vectors to Pinecone index '{idx}'."
             }
-
         except Exception as e:
             logger.error(f"Pinecone sync error: {e}")
             return {

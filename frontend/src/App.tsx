@@ -17,6 +17,23 @@ import type {
 } from './types';
 import { UploadCloud, ArrowUpRight, Leaf, Sparkles, FileText, Globe } from 'lucide-react';
 
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL
+  ? (import.meta as any).env.VITE_API_BASE_URL.replace(/\/$/, '')
+  : '';
+
+const getSessionId = (): string => {
+  try {
+    let sid = localStorage.getItem('rag_assistant_user_session_id');
+    if (!sid) {
+      sid = 'sess_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+      localStorage.setItem('rag_assistant_user_session_id', sid);
+    }
+    return sid;
+  } catch {
+    return 'default';
+  }
+};
+
 export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     try {
@@ -104,7 +121,9 @@ export default function App() {
 
   const fetchHealth = async () => {
     try {
-      const res = await fetch('/api/health');
+      const res = await fetch(`${API_BASE}/api/health`, {
+        headers: { 'X-Session-Id': getSessionId() },
+      });
       if (res.ok) {
         const data = await res.json();
         setHealth(data);
@@ -116,7 +135,9 @@ export default function App() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/documents/stats');
+      const res = await fetch(`${API_BASE}/api/documents/stats`, {
+        headers: { 'X-Session-Id': getSessionId() },
+      });
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -128,7 +149,9 @@ export default function App() {
 
   const fetchVoices = async () => {
     try {
-      const res = await fetch('/api/voice/voices');
+      const res = await fetch(`${API_BASE}/api/voice/voices`, {
+        headers: { 'X-Session-Id': getSessionId() },
+      });
       if (res.ok) {
         const data = await res.json();
         setAvailableVoices(data.voices || []);
@@ -154,9 +177,12 @@ export default function App() {
 
   const handleSynthesizeVoice = async (text: string, voice?: string): Promise<string | undefined> => {
     try {
-      const voiceRes = await fetch('/api/voice/synthesize', {
+      const voiceRes = await fetch(`${API_BASE}/api/voice/synthesize`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Id': getSessionId(),
+        },
         body: JSON.stringify({ text, voice: voice || selectedVoice }),
       });
       if (voiceRes.ok) {
@@ -325,9 +351,12 @@ export default function App() {
     let fullGeneratedContent = '';
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Id': getSessionId(),
+        },
         body: JSON.stringify({
           query: text,
           chat_history: messages.map((m) => ({ role: m.role, content: m.content })),
@@ -613,6 +642,7 @@ export default function App() {
             onSearchModeChange={setSearchMode}
             onStopAudio={stopActiveAudio}
             stats={stats}
+            sttEnabled={health?.stt_enabled !== false}
           />
         </div>
 

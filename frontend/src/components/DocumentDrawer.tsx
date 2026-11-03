@@ -19,6 +19,18 @@ interface DocumentDrawerProps {
   onRefreshStats: () => void;
 }
 
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL
+  ? (import.meta as any).env.VITE_API_BASE_URL.replace(/\/$/, '')
+  : '';
+
+const getSessionId = (): string => {
+  try {
+    return localStorage.getItem('rag_assistant_user_session_id') || 'default';
+  } catch {
+    return 'default';
+  }
+};
+
 export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
   isOpen,
   onClose,
@@ -46,8 +58,11 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/documents/upload', {
+      const res = await fetch(`${API_BASE}/api/documents/upload`, {
         method: 'POST',
+        headers: {
+          'X-Session-Id': getSessionId(),
+        },
         body: formData,
       });
       const data = await res.json();
@@ -79,9 +94,12 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
     setFeedback(null);
 
     try {
-      const res = await fetch('/api/documents/sync-pinecone', {
+      const res = await fetch(`${API_BASE}/api/documents/sync-pinecone`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Id': getSessionId(),
+        },
         body: JSON.stringify({
           api_key: apiKey || undefined,
           index_name: indexName || undefined,
@@ -112,10 +130,15 @@ export const DocumentDrawer: React.FC<DocumentDrawerProps> = ({
   };
 
   const handleClearDocuments = async () => {
-    if (!confirm('Clear all uploaded documents from ChromaDB?')) return;
+    if (!confirm('Clear all uploaded documents from current collection/namespace?')) return;
 
     try {
-      const res = await fetch('/api/documents/clear', { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/documents/clear`, {
+        method: 'DELETE',
+        headers: {
+          'X-Session-Id': getSessionId(),
+        },
+      });
       if (res.ok) {
         setFeedback({ type: 'success', text: 'Document store cleared.' });
         setSyncStatus('idle');

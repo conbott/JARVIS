@@ -60,6 +60,8 @@ async def transcribe_audio(audio: UploadFile = File(...)):
     Transcribes audio captured via browser MediaRecorder using faster-whisper.
     Ensures 100% browser compatibility (Opera GX, Brave, Chrome, Firefox, Safari).
     """
+    if not settings.STT_ENABLED:
+        raise HTTPException(status_code=403, detail="Speech-to-text is disabled by configuration (STT_ENABLED=false).")
     try:
         content = await audio.read()
         if not content:

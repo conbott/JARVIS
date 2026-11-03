@@ -47,7 +47,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteSession,
   health,
 }) => {
-  const modelName = health?.llm_model || 'qwen2.5-coder:7b';
+  const isHosted = health?.hosted || (health?.provider && health.provider !== 'ollama');
+  const modelName = isHosted
+    ? `API · ${health?.model || health?.llm_model}`
+    : (health?.llm_model || 'qwen2.5-coder:7b');
 
   if (!isOpen) {
     return null;

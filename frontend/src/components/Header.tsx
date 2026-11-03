@@ -27,7 +27,10 @@ export const Header: React.FC<HeaderProps> = ({
   onStopAudio,
   onOpenSystem,
 }) => {
-  const modelName = health?.llm_model || 'qwen2.5-coder:7b';
+  const isHosted = health?.hosted || (health?.provider && health.provider !== 'ollama');
+  const modelName = isHosted
+    ? `API · ${health?.provider} · ${health?.model || health?.llm_model}`
+    : (health?.llm_model || 'qwen2.5-coder:7b');
   const docCount = stats?.document_count ?? 0;
 
   return (
@@ -86,7 +89,7 @@ export const Header: React.FC<HeaderProps> = ({
           title="Open system configuration & status"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />
-          <span className="font-mono text-[11px] text-[var(--color-muted)] truncate max-w-[130px]">
+          <span className="font-mono text-[11px] text-[var(--color-muted)] truncate max-w-[150px]">
             {modelName}
           </span>
           <Settings2 className="w-3 h-3 text-[var(--color-muted)] ml-0.5" />
