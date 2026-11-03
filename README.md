@@ -14,12 +14,7 @@ A private, offline-capable, full-stack **Local RAG & Voice Assistant** built wit
 
 ## Screenshots
 
-<!-- Place screenshots or recording demos below -->
-> [!NOTE]
-> *Screenshots Placeholder:*
-> 
-> ![Chat Interface Placeholder](docs/screenshots/chat_interface.png)
-> *(To add your own screenshot, place an image at `docs/screenshots/chat_interface.png`)*
+![Jarvis Chat Interface](docs/screenshots/chat_interface.png)
 
 ---
 
@@ -43,6 +38,14 @@ A private, offline-capable, full-stack **Local RAG & Voice Assistant** built wit
    - Neural voice audio response streaming synthesized on CPU with Edge-TTS (`0 MB` GPU memory footprint).
 6. **Streaming Server-Sent Events (SSE)**:
    - Real-time token streaming with structured lifecycle events (`status`, `sources`, `token`, `done`).
+
+---
+
+## Documentation
+
+For in-depth technical specifications, design patterns, and full project implementation details:
+- **[Comprehensive Project Documentation](docs/PROJECT_DOCUMENTATION.md)**: Full end-to-end report on all features, hardware detection, spread retrieval, anti-hallucination engines, voice pipeline, and testing history.
+- **[System Architecture & Specifications](docs/ARCHITECTURE.md)**: Data flows, sequence diagrams, SSE event schemas, spread retrieval strategy, and LangChain module mappings.
 
 ---
 
@@ -321,7 +324,9 @@ Rag_ChatBot/
 │   ├── main.py               # FastAPI application entrypoint
 │   └── requirements.txt      # Pinned Python package dependencies
 ├── docs/
-│   └── ARCHITECTURE.md       # Detailed technical architecture specification
+│   ├── ARCHITECTURE.md          # Technical architecture & retrieval specifications
+│   ├── PROJECT_DOCUMENTATION.md # Comprehensive end-to-end project report
+│   └── screenshots/             # Interface screenshots for documentation
 ├── frontend/
 │   ├── src/
 │   │   ├── components/       # ChatArea, Sidebar, Header, Drawers, VoiceControls
