@@ -15,7 +15,7 @@ import type {
   SearchMode,
   VoiceOption,
 } from './types';
-import { UploadCloud, ArrowUpRight, Leaf, Sparkles, FileText, Globe } from 'lucide-react';
+import { UploadCloud, ArrowUpRight, Sparkles, FileText, Globe } from 'lucide-react';
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL
   ? (import.meta as any).env.VITE_API_BASE_URL.replace(/\/$/, '')
@@ -529,9 +529,9 @@ export default function App() {
         <main className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-[720px] mx-auto w-full select-none">
-              {/* Leaf Mark in Accent */}
-              <div className="w-10 h-10 rounded-xl bg-[var(--color-accent-soft)] flex items-center justify-center mb-4 text-[var(--color-accent)]">
-                <Leaf className="w-5 h-5" />
+              {/* Jarvis HUD Avatar */}
+              <div className="w-16 h-16 rounded-full bg-black/80 border border-[var(--color-border)] flex items-center justify-center mb-5 overflow-hidden shadow-lg ring-2 ring-[var(--color-accent)]/20">
+                <img src="/jarvis.png" alt="Jarvis" className="w-14 h-14 rounded-full object-contain" />
               </div>
 
               {/* Centered Serif Greeting */}

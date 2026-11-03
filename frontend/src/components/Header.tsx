@@ -1,5 +1,5 @@
 import React from 'react';
-import { PanelLeft, FileText, Square, Settings2, Leaf } from 'lucide-react';
+import { PanelLeft, FileText, Square, Settings2 } from 'lucide-react';
 import type { HealthStatus, DocumentStats, VoiceOption } from '../types';
 
 interface HeaderProps {
@@ -45,8 +45,12 @@ export const Header: React.FC<HeaderProps> = ({
           <PanelLeft className="w-4 h-4" />
         </button>
 
-        <div className="flex items-center gap-1.5 select-none">
-          <Leaf className="w-4 h-4 text-[var(--color-accent)] shrink-0" />
+        <div className="flex items-center gap-2 select-none">
+          <img
+            src="/jarvis.png"
+            alt="Jarvis"
+            className="w-5 h-5 rounded-full object-contain shrink-0 ring-1 ring-[var(--color-border)] shadow-sm"
+          />
           <span className="font-serif text-[15px] tracking-tight text-[var(--color-text)] font-medium">
             Jarvis
           </span>
