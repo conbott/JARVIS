@@ -34,7 +34,8 @@ class InMemoryRateLimiter(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         limit = settings.RATE_LIMIT_PER_MIN
         if limit > 0 and request.method != "OPTIONS":
-            client_ip = request.client.host if request.client else "unknown"
+            forwarded = request.headers.get("x-forwarded-for")
+            client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "127.0.0.1")
             now = time.time()
             cutoff = now - 60.0
             

@@ -39,7 +39,7 @@ A private, offline-capable, full-stack **Local RAG & Voice Assistant** built wit
    - Local on-disk persistent vector store via **ChromaDB**.
    - Optional cloud vector index synchronization via **Pinecone**.
 5. **Bidirectional Voice Assistant**:
-   - Push-to-talk voice input via browser Web Speech recognition or server-side Whisper transcription.
+   - Push-to-talk voice input via browser `MediaRecorder` audio capture sent to backend `faster-whisper` STT.
    - Neural voice audio response streaming synthesized on CPU with Edge-TTS (`0 MB` GPU memory footprint).
 6. **Streaming Server-Sent Events (SSE)**:
    - Real-time token streaming with structured lifecycle events (`status`, `sources`, `token`, `done`).
@@ -54,7 +54,7 @@ graph TD
 
     subgraph "Frontend Layer (:5173)"
         UI[React 19 + TypeScript + Tailwind CSS]
-        VoiceIn[MediaRecorder / Web Speech]
+        VoiceIn[MediaRecorder Audio Capture]
         VoiceOut[Web Audio API Player]
     end
 
@@ -105,19 +105,19 @@ graph TD
 [Stream]    Grounded Prompt + Context ──> Ollama (num_ctx>=4096) ──> SSE Tokens ──> React UI
 ```
 
-1. **Ingest**: Documents are parsed by LangChain loaders into page-aware Documents, partitioned by `RecursiveCharacterTextSplitter` (800 chars, 150 overlap), embedded via `qwen3-embedding:0.6b`, and stored in ChromaDB.
+1. **Ingest**: Documents are parsed by LangChain loaders into page-aware Documents, partitioned by `RecursiveCharacterTextSplitter` (800 chars, 150 overlap), embedded via `qwen3-embedding:0.6b` (or Gemini/OpenAI in hosted mode), and stored in ChromaDB or Pinecone.
 2. **Retrieve**: Incoming queries are classified. Summary queries trigger spread sampling across non-reference chunks; specific queries trigger cosine distance retrieval.
-3. **Routing**: If similarity $\ge 0.35$ or summary intent is detected, answers are grounded in document chunks. If similarity is low, query falls back to web search. Casual chat bypasses retrieval entirely.
+3. **Routing**: If similarity $\ge 0.35$ or summary intent is detected, answers are grounded in document chunks. (Cosine similarity mathematically spans $[-1.0, 1.0]$: orthogonal or opposite chunks yield zero or slightly negative scores, which are cleanly filtered out by the $0.35$ threshold). If similarity is low, query falls back to web search. Casual chat bypasses retrieval entirely.
 4. **Stream**: The synthesized prompt is streamed via Server-Sent Events token-by-token directly to the React interface.
 
 ---
 
 ## 📋 Prerequisites
 
-- **[Ollama](https://ollama.ai)** installed and running locally.
+- **[Ollama](https://ollama.ai)** installed and running locally (for local mode).
 - **Python 3.10+** (tested on Python 3.11/3.12).
 - **Node.js 18+** and **npm**.
-- (Optional) **Docker** and Docker Compose for containerized backend execution.
+- (Optional) **Docker** and Docker Compose *(provided, not tested locally)* for containerized backend execution.
 
 ---
 
@@ -209,11 +209,11 @@ To stop all background processes:
 ```
 
 > [!TIP]
-> Ensure your terminal is in the repository root folder (`c:\Users\<user>\...\Rag_ChatBot`) before running `.\start_all.bat`.
+> Ensure your terminal is in the repository root folder (`./Rag_ChatBot`) before running `.\start_all.bat`.
 
 ---
 
-## 🐳 Docker Deployment (Backend)
+## 🐳 Docker Deployment (Backend) *(Provided, not tested locally)*
 
 You can run the backend inside Docker while connecting to Ollama running on your host machine:
 
@@ -226,21 +226,74 @@ The container maps port `8000` and configures `host.docker.internal:11434` to co
 
 ---
 
+## 🚀 Deployment Guide (Hosted / Cloud Mode)
+
+The architecture supports complete serverless cloud deployment by setting a few environment variables:
+
+### 1. Backend (Python Web Host: Render, Railway, Fly.io, AWS)
+Deploy the `/backend` folder using a Python 3.11/3.12 runtime with start command:
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+#### Required Backend Environment Variables:
+| Variable | Value for Hosted Mode | Notes |
+| :--- | :--- | :--- |
+| `LLM_PROVIDER` | `gemini` (or `openai`) | Selects cloud LLM provider |
+| `EMBEDDING_PROVIDER` | `gemini` (or `openai`) | Selects cloud embedding provider |
+| `LLM_MODEL` | `gemini-1.5-flash` / `gemini-2.0-flash` | Cloud chat model name |
+| `EMBEDDING_MODEL` | `text-embedding-004` | Matching cloud embedding model |
+| `VECTOR_BACKEND` | `pinecone` | Serverless vector backend (no local disk needed) |
+| `PINECONE_API_KEY` | `your-pinecone-key` | Pinecone authentication |
+| `PINECONE_INDEX_NAME` | `rag-chatbot` | Auto-created if it does not exist |
+| `GOOGLE_API_KEY` | `AIzaSy...` | Required when `LLM_PROVIDER=gemini` |
+| `OPENAI_API_KEY` | `sk-...` | Required when `LLM_PROVIDER=openai` |
+| `STT_ENABLED` | `false` | Disables heavy local Whisper dependencies in cloud |
+| `CORS_ORIGINS` | `https://your-frontend.vercel.app` | Comma-separated allowed web origins |
+| `RATE_LIMIT_PER_MIN`| `60` | Per-client rate limit (reads first IP from `X-Forwarded-For`) |
+| `MAX_UPLOAD_MB` | `20` | Maximum file upload size limit |
+
+> [!IMPORTANT]
+> **SSE Reverse-Proxy Buffering Notice**:
+> When running behind a reverse proxy (Nginx, Cloudflare, AWS ALB, Render), proxy response buffering must be disabled for Server-Sent Events to stream tokens with zero latency.
+> The backend sets `X-Accel-Buffering: no` on streaming responses. If using custom Nginx, ensure `proxy_buffering off;` is configured for the `/api/chat` route.
+
+---
+
+### 2. Frontend (Vercel, Netlify, Cloudflare Pages)
+Deploy the `/frontend` directory to Vercel:
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **Environment Variable**:
+  - `VITE_API_BASE_URL`: `https://your-backend.onrender.com` (URL of your deployed backend)
+
+---
+
 ## ⚙️ Configuration Reference
 
 The following environment variables can be configured in `.env`:
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
+| `LLM_PROVIDER` | `ollama` | Active provider: `ollama`, `gemini`, or `openai`. |
+| `EMBEDDING_PROVIDER` | `ollama` | Active embedding provider: `ollama`, `gemini`, or `openai`. |
+| `VECTOR_BACKEND` | `chroma` | Vector backend: `chroma` (local) or `pinecone` (serverless cloud). |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | URL of the local or remote Ollama server. |
-| `LLM_MODEL` | `qwen2.5-coder:7b` | Ollama model identifier used for chat completions. |
+| `LLM_MODEL` | `qwen2.5-coder:7b` | LLM model identifier for chat completions. |
 | `EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | Model used to compute vector embeddings. |
-| `OLLAMA_NUM_CTX` | `4096` | Context window size allocated for Ollama chat generation. |
+| `OLLAMA_NUM_CTX` | `4096` | Context window allocated for Ollama (applies only to Ollama). |
 | `SIMILARITY_THRESHOLD` | `0.35` | Minimum cosine similarity required to trigger document RAG. |
-| `CHROMA_PERSIST_DIRECTORY` | `./chroma_db` | Filesystem path for local ChromaDB vector storage. |
-| `PINECONE_API_KEY` | `""` | Optional API key for cloud vector synchronization. |
-| `PINECONE_INDEX_NAME` | `attention-paper` | Name of the Pinecone index for cloud sync. |
+| `CHROMA_PERSIST_DIR` | `./chroma_db` | Filesystem path for local ChromaDB storage. |
+| `PINECONE_API_KEY` | `""` | Pinecone API key. |
+| `PINECONE_INDEX_NAME` | `attention-paper` | Pinecone index name (auto-created if missing). |
+| `GOOGLE_API_KEY` | `""` | Google Gemini API key (never logged). |
+| `OPENAI_API_KEY` | `""` | OpenAI API key (never logged). |
+| `LLM_BASE_URL` | `""` | Optional base URL for OpenAI-compatible providers (Groq, DeepSeek). |
+| `STT_ENABLED` | `true` | Enables speech-to-text. When `false`, PyAV/Whisper are never loaded. |
 | `VOICE_TTS_VOICE` | `en-US-AriaNeural` | Default neural voice model for Edge-TTS speech synthesis. |
+| `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated list of allowed frontend origins. |
+| `RATE_LIMIT_PER_MIN` | `0` (disabled) | Per-IP rate limit per minute. Uses `X-Forwarded-For` when behind proxies. |
+| `MAX_UPLOAD_MB` | `20` | Maximum file upload size in megabytes. |
 
 ---
 
@@ -289,9 +342,9 @@ Rag_ChatBot/
 ## ⚠️ Known Limitations
 
 1. **Local Model Hardware Requirements**: Running `qwen2.5-coder:7b` with a 4096-token context window performs best with at least 6GB-8GB of dedicated VRAM. For systems with lower VRAM, consider switching to `llama3.2:3b`.
-2. **Browser Speech Recognition**: Voice recognition uses the browser's native `webkitSpeechRecognition` API, which works best in Chromium-based browsers (Chrome, Edge, Brave). On unsupported browsers, fallback to audio upload transcription is provided.
+2. **Speech-to-Text (STT) Processing**: Voice recording captures audio using the standard browser `MediaRecorder` API and transcribes it on backend CPU with `faster-whisper`. When deployed to low-spec cloud instances or serverless hosts without PyAV/Torch, set `STT_ENABLED=false` to prevent importing STT dependencies and conserve compute.
 3. **DuckDuckGo Rate Limits**: When relying extensively on web search fallback, DuckDuckGo may occasionally throttle high-frequency automated requests.
-4. **Pinecone Cloud Index Dimensions**: When syncing embeddings to Pinecone, ensure the target Pinecone index dimension matches the embedding model dimension (1024 for `qwen3-embedding:0.6b`).
+4. **Pinecone Cloud Index Dimensions**: In Pinecone primary mode, indexes are auto-created with the dimension matching your active embedding model (768 for Gemini `text-embedding-004`, 1024 for Ollama `qwen3-embedding:0.6b`, 1536 for OpenAI `text-embedding-3-small`). If using a pre-existing index, its dimension must match the active model.
 
 ---
 

@@ -14,7 +14,7 @@ graph TD
     
     subgraph "Frontend Layer (:5173)"
         UI[React 19 + TypeScript + Tailwind CSS]
-        VoiceIn[MediaRecorder / Web Speech API]
+        VoiceIn[MediaRecorder Audio Capture]
         AudioOut[Web Audio API Player]
     end
 
@@ -111,11 +111,11 @@ flowchart TD
 ## 3. Retrieval Engine & The Spread Route
 
 ### A. Cosine Similarity & Threshold (`0.35`)
-- When queries target specific facts, ChromaDB retrieves top-$k$ nearest neighbors using cosine similarity.
+- When queries target specific facts, vector retrieval computes top-$k$ nearest neighbors using cosine similarity.
 - ChromaDB returns cosine distances ($D \in [0, 2]$). These are transformed to similarity scores via:
   $$\text{similarity} = 1.0 - \text{distance}$$
-- If $\max(\text{similarity}) \ge 0.35$, the document context is accepted as authoritative and injected into the prompt.
-- Sources report exact match percentages (e.g. `Score: 68%`) on frontend source chips.
+- Mathematically, cosine similarity spans the range $[-1.0, 1.0]$. For orthogonal or divergent vector representations, similarity scores can be zero or slightly negative. The threshold $\max(\text{similarity}) \ge 0.35$ filters out negative, zero, and weak matches, ensuring only semantically grounded document context is supplied to the prompt.
+- Sources report exact match percentages (e.g. `Score: 68%`) on frontend source chips for positive matches.
 
 ### B. Document-Level Summary & Spread Retrieval Route
 Generic overview queries (e.g., *"summarize this paper"*, *"key findings"*, *"what is this document about"*, *"break down the architecture"*, *"analysis of the document"*) naturally score lower on specific dense similarity metrics because their semantics encompass the entire corpus rather than a single passage.
@@ -227,26 +227,24 @@ The application features full bidirectional voice conversation:
 ```mermaid
 sequenceDiagram
     participant User
-    participant Browser as Browser Audio
-    participant EdgeTTS as Backend Edge-TTS
+    participant Browser as Browser MediaRecorder
+    participant BackendSTT as Backend faster-whisper STT
     participant LLM as Backend RAG / LLM
+    participant EdgeTTS as Backend Edge-TTS
 
-    User->>Browser: Speaks into microphone
-    alt Web Speech API
-        Browser->>Browser: Real-time Speech-to-Text (webkitSpeechRecognition)
-        Browser->>LLM: Sends transcribed text via /api/chat
-    else Audio Upload
-        Browser->>LLM: Sends audio blob to /api/voice/transcribe (Whisper)
-        LLM-->>Browser: Transcribed text
-    end
-    LLM-->>Browser: Streams text response
-    Browser->>EdgeTTS: POST /api/voice/speak {text, voice}
-    EdgeTTS-->>Browser: Returns audio/mp3 stream
-    Browser->>User: Plays natural voice audio through Web Audio API
+    User->>Browser: Holds mic button & speaks
+    User->>Browser: Releases mic button
+    Browser->>BackendSTT: POST /api/voice/transcribe (Audio Blob)
+    BackendSTT-->>Browser: Returns transcribed text
+    Browser->>LLM: Dispatches message to /api/chat
+    LLM-->>Browser: Streams text completion tokens via SSE
+    Browser->>EdgeTTS: POST /api/voice/synthesize {text, voice}
+    EdgeTTS-->>Browser: Returns audio/mpeg stream
+    Browser->>User: Plays natural neural audio through Web Audio API
 ```
 
-- **Voice Input**: Client-side speech recognition using the browser's native `webkitSpeechRecognition` with fallback to server-side `faster-whisper` transcription.
-- **Voice Output**: Edge-TTS streaming audio synthesis running on CPU using Microsoft natural neural voices (e.g. `en-US-AriaNeural`, `en-US-ChristopherNeural`), streamed directly to the browser for latency-free playback.
+- **Voice Input**: Client audio recorded in the browser using the standard `MediaRecorder` API (`audio/webm`), streamed to the backend `/api/voice/transcribe` endpoint, and transcribed using `faster-whisper` on CPU (INT8 quantization, 0 MB GPU footprint). When `STT_ENABLED=false`, STT modules remain unimported and lazy.
+- **Voice Output**: Edge-TTS audio synthesis running on CPU using Microsoft natural neural voices (e.g. `en-US-GuyNeural`, `en-US-AriaNeural`), streamed directly to the browser for instant playback.
 
 ---
 
@@ -256,10 +254,14 @@ The project leverages LangChain components for document processing, splitting, v
 
 | File | LangChain Module / Class | Purpose |
 | :--- | :--- | :--- |
-| [`backend/routers/documents.py`](file:///c:/Users/con1k/Documents/datascience_course/Rag_ChatBot/backend/routers/documents.py) | `langchain_community.document_loaders.PyPDFLoader` | Extracts text and metadata page-by-page from uploaded PDF documents. |
-| [`backend/routers/documents.py`](file:///c:/Users/con1k/Documents/datascience_course/Rag_ChatBot/backend/routers/documents.py) | `langchain_community.document_loaders.TextLoader` | Reads raw UTF-8 plaintext, Markdown, and text documents into LangChain Document records. |
-| [`backend/routers/documents.py`](file:///c:/Users/con1k/Documents/datascience_course/Rag_ChatBot/backend/routers/documents.py) | `langchain_text_splitters.RecursiveCharacterTextSplitter` | Splits document bodies into optimal semantic chunks (size: 800, overlap: 150) preserving paragraphs and sentences. |
-| [`backend/services/rag_service.py`](file:///c:/Users/con1k/Documents/datascience_course/Rag_ChatBot/backend/services/rag_service.py) | `langchain_ollama.OllamaEmbeddings` | Generates 1024-dimensional dense vector embeddings using local Ollama (`qwen3-embedding:0.6b`). |
-| [`backend/services/rag_service.py`](file:///c:/Users/con1k/Documents/datascience_course/Rag_ChatBot/backend/services/rag_service.py) | `langchain_chroma.Chroma` | Manages local vector collection storage, persistence, and cosine distance query similarity searches. |
-| [`backend/services/rag_service.py`](file:///c:/Users/con1k/Documents/datascience_course/Rag_ChatBot/backend/services/rag_service.py) | `langchain_pinecone.PineconeVectorStore` | Integrates cloud Pinecone vector database for cloud synchronization and remote query capabilities. |
-| [`backend/services/rag_service.py`](file:///c:/Users/con1k/Documents/datascience_course/Rag_ChatBot/backend/services/rag_service.py) | `langchain_ollama.ChatOllama` | Interfaces with the local Ollama LLM (`qwen2.5-coder:7b`) with `num_ctx=4096` for streaming grounded completions. |
+| [`backend/routers/documents.py`](../backend/routers/documents.py) | `langchain_community.document_loaders.PyPDFLoader` | Extracts text and metadata page-by-page from uploaded PDF documents. |
+| [`backend/routers/documents.py`](../backend/routers/documents.py) | `langchain_community.document_loaders.TextLoader` | Reads raw UTF-8 plaintext, Markdown, and text documents into LangChain Document records. |
+| [`backend/routers/documents.py`](../backend/routers/documents.py) | `langchain_text_splitters.RecursiveCharacterTextSplitter` | Splits document bodies into optimal semantic chunks (size: 800, overlap: 150) preserving paragraphs and sentences. |
+| [`backend/core/embeddings.py`](../backend/core/embeddings.py) | `langchain_ollama.OllamaEmbeddings` | Generates 1024-dimensional dense vector embeddings using local Ollama (`qwen3-embedding:0.6b`). |
+| [`backend/core/embeddings.py`](../backend/core/embeddings.py) | `langchain_google_genai.GoogleGenerativeAIEmbeddings` | Generates 768-dimensional embeddings via Google Gemini (`text-embedding-004`). |
+| [`backend/core/embeddings.py`](../backend/core/embeddings.py) | `langchain_openai.OpenAIEmbeddings` | Generates embeddings via OpenAI-compatible endpoints (`text-embedding-3-small`). |
+| [`backend/core/vectorstore.py`](../backend/core/vectorstore.py) | `langchain_chroma.Chroma` | Manages local vector collection storage, persistence, and cosine distance query similarity searches. |
+| [`backend/core/vectorstore.py`](../backend/core/vectorstore.py) | `langchain_pinecone.PineconeVectorStore` | Integrates cloud Pinecone vector database for cloud synchronization and primary vector retrieval. |
+| [`backend/core/llm.py`](../backend/core/llm.py) | `langchain_ollama.ChatOllama` | Interfaces with the local Ollama LLM (`qwen2.5-coder:7b`) with `num_ctx=4096` for streaming grounded completions. |
+| [`backend/core/llm.py`](../backend/core/llm.py) | `langchain_google_genai.ChatGoogleGenerativeAI` | Streams chat completions from Google Gemini models (e.g. `gemini-1.5-flash`, `gemini-2.0-flash`). |
+| [`backend/core/llm.py`](../backend/core/llm.py) | `langchain_openai.ChatOpenAI` | Streams chat completions from OpenAI and OpenAI-compatible endpoints (Groq, DeepSeek, OpenRouter). |

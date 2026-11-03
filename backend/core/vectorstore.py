@@ -80,13 +80,48 @@ class VectorStoreManager:
         if not settings.PINECONE_API_KEY:
             raise ValueError("PINECONE_API_KEY is not set. Please provide it in .env to use Pinecone vector backend.")
         if self._pinecone_index is None:
-            from pinecone import Pinecone
+            from pinecone import Pinecone, ServerlessSpec
             pc = Pinecone(api_key=settings.PINECONE_API_KEY)
-            existing = [i.name for i in pc.list_indexes()]
-            if settings.PINECONE_INDEX_NAME not in existing:
-                raise ValueError(
-                    f"Pinecone index '{settings.PINECONE_INDEX_NAME}' was not found. Existing indexes: {existing}"
+
+            # 1. Detect embedding dimension by embedding one test string
+            try:
+                test_vec = embedding_engine.client.embed_query("dimension_check")
+                dim = len(test_vec)
+                logger.info(f"Detected embedding dimension {dim} for model '{settings.EMBEDDING_MODEL}' ({settings.EMBEDDING_PROVIDER})")
+            except Exception as e:
+                logger.error(f"Failed to detect embedding dimension: {e}")
+                raise ValueError(f"Could not determine embedding dimension using model '{settings.EMBEDDING_MODEL}': {e}")
+
+            # 2. Check if index exists or create it
+            existing_indexes = [i.name for i in pc.list_indexes()]
+            if settings.PINECONE_INDEX_NAME not in existing_indexes:
+                logger.info(f"Pinecone index '{settings.PINECONE_INDEX_NAME}' not found. Creating index with dimension {dim} and cosine metric...")
+                pc.create_index(
+                    name=settings.PINECONE_INDEX_NAME,
+                    dimension=dim,
+                    metric="cosine",
+                    spec=ServerlessSpec(cloud="aws", region="us-east-1")
                 )
+                import time
+                for _ in range(60):
+                    desc = pc.describe_index(settings.PINECONE_INDEX_NAME)
+                    status = desc.status
+                    is_ready = status.get("ready", False) if isinstance(status, dict) else getattr(status, "ready", False)
+                    if is_ready:
+                        logger.info(f"Pinecone index '{settings.PINECONE_INDEX_NAME}' is ready.")
+                        break
+                    time.sleep(1)
+            else:
+                # 3. Verify dimension matches
+                desc = pc.describe_index(settings.PINECONE_INDEX_NAME)
+                existing_dim = getattr(desc, "dimension", None)
+                if existing_dim is not None and existing_dim != dim:
+                    raise ValueError(
+                        f"Pinecone dimension mismatch: existing index '{settings.PINECONE_INDEX_NAME}' has dimension {existing_dim}, "
+                        f"but active embedding model '{settings.EMBEDDING_MODEL}' ({settings.EMBEDDING_PROVIDER}) produces {dim}-dimensional vectors. "
+                        f"Please specify a PINECONE_INDEX_NAME with {dim} dimensions or change the EMBEDDING_MODEL."
+                    )
+
             self._pinecone_index = pc.Index(settings.PINECONE_INDEX_NAME)
         return self._pinecone_index
 
@@ -185,12 +220,13 @@ class VectorStoreManager:
             namespace = session_id or "default"
             try:
                 pc_index = self._get_pinecone_index()
+                # Query with an overview embedding vector to fetch top candidates across namespace
+                overview_vec = embedding_engine.client.embed_query("overview of document structure, key themes, and conclusions")
                 stats = pc_index.describe_index_stats()
-                dim = stats.dimension or 1024
-                # Query with zero vector to fetch top chunks in namespace
+                total_count = getattr(stats, "total_vector_count", 100) or 100
                 query_res = pc_index.query(
-                    vector=[0.0] * dim,
-                    top_k=min(100, (stats.total_vector_count or 100)),
+                    vector=overview_vec,
+                    top_k=min(100, max(20, total_count)),
                     include_metadata=True,
                     namespace=namespace
                 )

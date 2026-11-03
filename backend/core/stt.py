@@ -3,19 +3,23 @@ import tempfile
 import logging
 from typing import Optional
 
-# Compatibility patch for PyAV >= 13/14+ where metadata_errors was removed from av.open
-try:
-    import av
-    if hasattr(av, "open"):
-        _orig_av_open = av.open
-        def _compat_av_open(*args, **kwargs):
-            kwargs.pop("metadata_errors", None)
-            return _orig_av_open(*args, **kwargs)
-        av.open = _compat_av_open
-except Exception:
-    pass
-
 logger = logging.getLogger(__name__)
+
+def _apply_av_patch():
+    """
+    Compatibility patch for PyAV >= 13/14+ where metadata_errors was removed from av.open.
+    Only executed when STT is actively invoked.
+    """
+    try:
+        import av
+        if hasattr(av, "open"):
+            _orig_av_open = av.open
+            def _compat_av_open(*args, **kwargs):
+                kwargs.pop("metadata_errors", None)
+                return _orig_av_open(*args, **kwargs)
+            av.open = _compat_av_open
+    except Exception:
+        pass
 
 class STTEngine:
     def __init__(self, model_size: str = "base.en"):
@@ -26,9 +30,10 @@ class STTEngine:
     def model(self):
         """
         Lazy load WhisperModel on CPU with INT8 compute to conserve memory
-        and ensure instant server startup.
+        and ensure instant server startup. Only imports faster_whisper when called.
         """
         if self._model is None:
+            _apply_av_patch()
             logger.info(f"Loading faster-whisper '{self.model_size}' model on CPU/INT8...")
             from faster_whisper import WhisperModel
             self._model = WhisperModel(self.model_size, device="cpu", compute_type="int8")
@@ -64,4 +69,10 @@ class STTEngine:
                 except Exception:
                     pass
 
-stt_engine = STTEngine()
+_stt_engine_instance: Optional[STTEngine] = None
+
+def get_stt_engine() -> STTEngine:
+    global _stt_engine_instance
+    if _stt_engine_instance is None:
+        _stt_engine_instance = STTEngine()
+    return _stt_engine_instance

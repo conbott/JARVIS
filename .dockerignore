@@ -1,0 +1,13 @@
+.env
+.env.*
+node_modules
+chroma_db
+backend/chroma_db
+.venv
+backend/.venv
+__pycache__
+**/__pycache__
+dist
+frontend/dist
+scratch
+*.log

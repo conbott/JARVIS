@@ -2,8 +2,8 @@ import logging
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Response, UploadFile, File
 from pydantic import BaseModel
+from config import settings
 from core.voice import voice_engine
-from core.stt import stt_engine
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,9 @@ async def transcribe_audio(audio: UploadFile = File(...)):
         if audio.filename and "." in audio.filename:
             suffix = "." + audio.filename.rsplit(".", 1)[1]
 
-        transcription = stt_engine.transcribe_audio_bytes(content, suffix=suffix)
+        from core.stt import get_stt_engine
+        engine = get_stt_engine()
+        transcription = engine.transcribe_audio_bytes(content, suffix=suffix)
         return {
             "status": "success",
             "text": transcription
