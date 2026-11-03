@@ -176,9 +176,17 @@ class UnifiedLLMClient:
                 try:
                     async with client.stream("POST", url, json=request_data) as response:
                         if response.status_code != 200:
-                            error_text = await response.aread()
+                            error_text = (await response.aread()).decode("utf-8", errors="ignore")
                             logger.error(f"Ollama chat error status {response.status_code}: {error_text}")
-                            yield f"Error communicating with local LLM (HTTP {response.status_code})"
+                            if response.status_code == 404 or "not found" in error_text.lower():
+                                yield (
+                                    f"⚠️ **Model '{self.model_name}' Not Found:** It looks like this model has not been downloaded yet.\n\n"
+                                    f"Please open your terminal and run:\n"
+                                    f"```bash\nollama pull {self.model_name}\n```\n"
+                                    f"*(Or open the **System Panel** in the top right to select an already installed model)*"
+                                )
+                            else:
+                                yield f"Error communicating with local LLM (HTTP {response.status_code})"
                             return
 
                         async for line in response.aiter_lines():

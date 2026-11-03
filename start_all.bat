@@ -1,7 +1,20 @@
 @echo off
 echo ===================================================
-echo Starting Local RAG and Voice Assistant Services...
+echo Starting Jarvis Local RAG and Voice Assistant...
 echo ===================================================
+
+if not exist "%~dp0backend\.venv" (
+    echo [ERROR] Python virtual environment not found at backend\.venv!
+    echo Please run setup.bat first to install all dependencies.
+    echo ===================================================
+    pause
+    exit /b 1
+)
+
+if not exist "%~dp0backend\.env" (
+    echo [NOTICE] backend\.env not found, creating from .env.example...
+    copy "%~dp0backend\.env.example" "%~dp0backend\.env" >nul
+)
 
 echo [1/3] Launching Ollama...
 start "Ollama Engine (11434)" cmd /k "ollama serve"
