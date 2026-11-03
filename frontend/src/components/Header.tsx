@@ -48,7 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-1.5 select-none">
           <Leaf className="w-4 h-4 text-[var(--color-accent)] shrink-0" />
           <span className="font-serif text-[15px] tracking-tight text-[var(--color-text)] font-medium">
-            Assistant
+            Jarvis
           </span>
         </div>
       </div>
