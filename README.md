@@ -12,12 +12,6 @@ A private, offline-capable, full-stack **Local RAG & Voice Assistant** built wit
 
 ---
 
-## Screenshots
-
-![Jarvis Chat Interface](docs/screenshots/chat_interface.png)
-
----
-
 ## Key Features
 
 1. **Claude-Style Nature Green Dark Palette**:
