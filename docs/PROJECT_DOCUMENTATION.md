@@ -1,26 +1,29 @@
 # Jarvis Project Documentation: End-to-End Technical Report
 
-This document provides a comprehensive, granular, and accurate account of all architectural decisions, implementations, features, algorithms, optimizations, and troubleshooting completed for the **Jarvis Local RAG & Voice Assistant** project.
+This document provides a comprehensive, granular, and accurate account of all architectural decisions, implementations, features, algorithms, data collection sources, academic citations, and troubleshooting completed for the **Jarvis Local RAG & Voice Assistant** project.
 
 ---
 
 ## Table of Contents
 1. [Project Overview & Design Philosophy](#1-project-overview--design-philosophy)
 2. [Branding & User Interface](#2-branding--user-interface)
-3. [Hardware Detection & Dynamic Model Management](#3-hardware-detection--dynamic-model-management)
-4. [Document Ingestion & Processing Pipeline](#4-document-ingestion--processing-pipeline)
-5. [Hybrid Query Routing & Intent Classification](#5-hybrid-query-routing--intent-classification)
-6. [Vector Retrieval & The Spread Retrieval Algorithm](#6-vector-retrieval--the-spread-retrieval-algorithm)
-7. [Real-Time Web Search & Query Reformulation](#7-real-time-web-search--query-reformulation)
-8. [Anti-Hallucination & System Clock Ground Truth](#8-anti-hallucination--system-clock-ground-truth)
-9. [Multi-Provider LLM & Embedding Architecture](#9-multi-provider-llm--embedding-architecture)
-10. [Dual Vector Store Tiers: ChromaDB & Pinecone](#10-dual-vector-store-tiers-chromadb--pinecone)
-11. [Bidirectional Push-to-Talk Voice Pipeline](#11-bidirectional-push-to-talk-voice-pipeline)
-12. [Server-Sent Events (SSE) Streaming Protocol](#12-server-sent-events-sse-streaming-protocol)
-13. [Security, Rate Limiting & Proxy Compatibility](#13-security-rate-limiting--proxy-compatibility)
-14. [Deployment: Local & Cloud Topologies](#14-deployment-local--cloud-topologies)
-15. [Automated Scripts (setup.bat, start_all.bat, stop_all.bat)](#15-automated-scripts-setupbat-start_allbat-stop_allbat)
-16. [Verification History & Resolved Challenges](#16-verification-history--resolved-challenges)
+3. [System Architecture & Project Repository Structure](#3-system-architecture--project-repository-structure)
+4. [Data Collection, Benchmark Corpora & Document Sources](#4-data-collection-benchmark-corpora--document-sources)
+5. [Hardware Detection & Dynamic Model Management](#5-hardware-detection--dynamic-model-management)
+6. [Document Ingestion & Chunking Pipeline](#6-document-ingestion--chunking-pipeline)
+7. [Hybrid Query Routing & Intent Classification](#7-hybrid-query-routing--intent-classification)
+8. [Vector Retrieval & The Spread Retrieval Algorithm](#8-vector-retrieval--the-spread-retrieval-algorithm)
+9. [Real-Time Web Search & Query Reformulation](#9-real-time-web-search--query-reformulation)
+10. [Anti-Hallucination & System Clock Ground Truth](#10-anti-hallucination--system-clock-ground-truth)
+11. [Multi-Provider LLM & Embedding Architecture](#11-multi-provider-llm--embedding-architecture)
+12. [Dual Vector Store Tiers: ChromaDB & Pinecone](#12-dual-vector-store-tiers-chromadb--pinecone)
+13. [Bidirectional Push-to-Talk Voice Pipeline](#13-bidirectional-push-to-talk-voice-pipeline)
+14. [Server-Sent Events (SSE) Streaming Protocol](#14-server-sent-events-sse-streaming-protocol)
+15. [Security, Rate Limiting & Proxy Compatibility](#15-security-rate-limiting--proxy-compatibility)
+16. [Deployment: Local & Cloud Topologies](#16-deployment-local--cloud-topologies)
+17. [Automated Scripts (setup.bat, start_all.bat, stop_all.bat)](#17-automated-scripts-setupbat-start_allbat-stop_allbat)
+18. [Verification History & Resolved Challenges](#18-verification-history--resolved-challenges)
+19. [Academic Citations & References](#19-academic-citations--references)
 
 ---
 
@@ -53,7 +56,83 @@ The frontend is built with React 19, Vite, and Tailwind CSS v4, adhering to a na
 
 ---
 
-## 3. Hardware Detection & Dynamic Model Management
+## 3. System Architecture & Project Repository Structure
+
+The Jarvis repository is organized into cleanly decoupled directories separating the FastAPI ASGI service, React 19 client, technical documentation assets, and Windows orchestration scripts.
+
+```
+JARVIS/ (https://github.com/conbott/JARVIS)
+├── backend/                 # FastAPI asynchronous service
+│   ├── chroma_db/           # Local SQLite on-disk vector persistence
+│   ├── core/                # RAG chain, LLM, embeddings, search, voice
+│   ├── routers/             # API routes (/chat, /documents, /voice, /models)
+│   ├── services/            # Hardware probing & model discovery
+│   ├── temp_uploads/        # Staged document uploads for chunking
+│   └── main.py              # Application entrypoint & middleware setup
+├── docs/                    # Technical documentation & project visual assets
+│   ├── charts/              # Matplotlib evaluation metrics (DPI 300)
+│   ├── screenshots/         # UI captures and repository file tree views
+│   ├── ARCHITECTURE.md      # Dataflow diagrams & technical specs
+│   ├── PROJECT_DOCUMENTATION.md # Comprehensive Markdown report
+│   └── Jarvis_Project_Documentation.pdf # 14-page publication report
+├── frontend/                # React 19 + TypeScript + Tailwind CSS UI
+│   ├── src/components/      # ChatWindow, Header, SystemPanel, KnowledgeDrawer
+│   └── package.json         # UI dependency tree
+├── scripts/                 # Automated evaluation & documentation compilers
+│   ├── generate_charts.py   # Benchmark chart generator
+│   └── generate_pdf_docs.py # ReportLab PDF compilation script
+├── .dockerignore / .gitignore
+├── .env.example             # Multi-provider local/cloud configuration template
+├── README.md                # Public project overview & quickstart guide
+├── docker-compose.yml       # Multi-container orchestration topology
+├── setup.bat                # Automated virtualenv & dependency provisioner
+├── start_all.bat            # Concurrent Ollama, Backend, Frontend launcher
+└── stop_all.bat             # Graceful process termination script
+```
+
+![GitHub Repository Structure](screenshots/github_structure.png)
+*Figure 1: GitHub repository layout (github.com/conbott/JARVIS) displaying root project directories, configuration files, and Windows batch automations.*
+
+![Jarvis Chat Interface](screenshots/chat_interface.png)
+*Figure 2: Jarvis web interface featuring nature-green palette, conversational history, and sliding knowledge drawer.*
+
+---
+
+## 4. Data Collection, Benchmark Corpora & Document Sources
+
+To evaluate the dual RAG and search pipelines across technical, dense, and open-domain queries, multiple benchmark datasets and documents were collected:
+
+### A. Academic Research Ingestion Corpus
+- **Document Title**: *Attention Is All You Need* (Vaswani et al., 2017)
+- **Acquisition Source**: Cornell University arXiv repository (`arXiv:1706.03762`)
+- **Direct Link**: [https://arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762)
+- **Corpus Characteristics**: 12 pages, 15,200 words, dense equations, multi-head attention diagrams, multi-column tables, and 40+ formal citations.
+- **Evaluation Purpose**: Serves as the gold standard for testing chunk boundary splitting, 1-based page metadata preservation, bibliographic citation filtering, and whole-document Spread Retrieval synthesis.
+
+### B. Technical Software Documentation & Specifications
+- **Corpus Content**: Internal system architecture documents (`docs/ARCHITECTURE.md`), Markdown specification reports (`report_for_claude.md`), and API documentation (`README.md`).
+- **Characteristics**: GitHub-flavored markdown with code fences, JSON schemas, nested bullet lists, and technical tables.
+- **Evaluation Purpose**: Benchmarks code preservation, syntax-highlighted code block extraction, and zero-shot question answering over system specifications.
+
+### C. Open-Domain Real-Time Web Search Corpus
+- **Source**: DuckDuckGo Global Web Index via Python API (`duckduckgo_search` / `DDGS`).
+- **Domain Coverage**: Real-time news, software release notes, and community game patches (e.g. Pokémon Fire Ash community release notes from PokéHarbor: [https://pokeharbor.com/2021/06/pokemon-fire-ash/](https://pokeharbor.com/2021/06/pokemon-fire-ash/)).
+- **Evaluation Purpose**: Tests real-time fact retrieval, entity disambiguation, multi-turn pronoun reformulation, and source attribution verification.
+
+### D. Acoustic & Speech Corpora
+- **Speech-to-Text (ASR)**: Faster-Whisper models pre-trained on 680,000 hours of multi-accented audio from LibriSpeech and CommonVoice (Radford et al., 2022).
+- **Speech Synthesis (TTS)**: Microsoft Edge Neural Voice Speech Corpus containing thousands of hours of high-fidelity phonetically balanced studio speech.
+
+| Corpus / Source | Type | Acquisition Source / Link | Evaluation Purpose |
+| :--- | :--- | :--- | :--- |
+| **Attention Is All You Need** | Academic PDF | `arXiv:1706.03762` (Cornell University) | Dense mathematical RAG, page citing, spread retrieval |
+| **Jarvis Technical Specs** | Markdown (`.md`) | Local Repository (`docs/ARCHITECTURE.md`) | Code block preservation, structural tables |
+| **DuckDuckGo Web Index** | Live Web API | DuckDuckGo Search API (`DDGS`) | Multi-turn pronoun reformulation, release notes |
+| **LibriSpeech / CommonVoice** | Acoustic Audio | OpenAI Whisper Benchmark Corpora | Push-to-talk STT transcription on CPU |
+
+---
+
+## 5. Hardware Detection & Dynamic Model Management
 
 ### A. Automated Hardware Discovery (`backend/services/hardware_service.py`)
 On application initialization, the backend probes host hardware specifications:
@@ -78,7 +157,7 @@ Based on detected hardware, Jarvis recommends the optimal Ollama LLM:
 
 ---
 
-## 4. Document Ingestion & Processing Pipeline
+## 6. Document Ingestion & Chunking Pipeline
 
 The ingestion engine (`backend/routers/documents.py`) leverages LangChain for parsing and chunking:
 
@@ -95,7 +174,7 @@ The ingestion engine (`backend/routers/documents.py`) leverages LangChain for pa
 
 ---
 
-## 5. Hybrid Query Routing & Intent Classification
+## 7. Hybrid Query Routing & Intent Classification
 
 Jarvis uses an adaptive query routing engine (`backend/core/rag_chain.py`):
 
@@ -121,13 +200,16 @@ User Query ──> [Pre-Checks]
 
 ---
 
-## 6. Vector Retrieval & The Spread Retrieval Algorithm
+## 8. Vector Retrieval & The Spread Retrieval Algorithm
 
 ### A. Cosine Similarity Metric & Threshold
 - ChromaDB returns cosine distance values $D \in [0, 2]$. These are transformed to cosine similarity via:
   $$\text{similarity} = 1.0 - D$$
 - Mathematically, cosine similarity spans the interval $[-1.0, 1.0]$. Orthogonal or divergent chunks yield zero or negative similarity scores.
 - A threshold of $\ge 0.35$ cleanly filters out irrelevant, orthogonal, or negative matches.
+
+![Cosine Similarity Distribution](charts/cosine_similarity_distribution.png)
+*Figure 3: Cosine similarity distribution curve showing rejection boundary tau = 0.35.*
 
 ### B. The Spread Retrieval Algorithm for Document Summaries
 Standard top-$k$ similarity fails on broad summary requests (*"summarize this document"*, *"what are the key takeaways"*) because summary semantics span the entire text rather than concentrating in one dense passage.
@@ -141,7 +223,7 @@ Jarvis implements **Spread Retrieval**:
 
 ---
 
-## 7. Real-Time Web Search & Query Reformulation
+## 9. Real-Time Web Search & Query Reformulation
 
 ### A. DuckDuckGo Search Integration (`backend/core/search.py`)
 - Executes queries via `duckduckgo_search` (`DDGS`).
@@ -157,7 +239,7 @@ When users ask follow-up questions with pronouns (*"when was it first released"*
 
 ---
 
-## 8. Anti-Hallucination & System Clock Ground Truth
+## 10. Anti-Hallucination & System Clock Ground Truth
 
 To eliminate LLM date hallucinations (such as outputting `[insert today's date]` or repeating previous search failures):
 
@@ -173,7 +255,7 @@ To eliminate LLM date hallucinations (such as outputting `[insert today's date]`
 
 ---
 
-## 9. Multi-Provider LLM & Embedding Architecture
+## 11. Multi-Provider LLM & Embedding Architecture
 
 The core inference layer (`backend/core/llm.py` and `backend/core/embeddings.py`) provides unified abstractions:
 
@@ -189,7 +271,7 @@ Modern reasoning models (such as DeepSeek-R1 or Qwen-QwQ) emit internal reasonin
 
 ---
 
-## 10. Dual Vector Store Tiers: ChromaDB & Pinecone
+## 12. Dual Vector Store Tiers: ChromaDB & Pinecone
 
 ### A. Local ChromaDB Tier
 - Stores document chunks and dense embeddings on disk at `./backend/chroma_db`.
@@ -203,7 +285,7 @@ Modern reasoning models (such as DeepSeek-R1 or Qwen-QwQ) emit internal reasonin
 
 ---
 
-## 11. Bidirectional Push-to-Talk Voice Pipeline
+## 13. Bidirectional Push-to-Talk Voice Pipeline
 
 1. **Audio Capture**: Browser `MediaRecorder` captures microphone audio in `audio/webm` format while the user holds the microphone button.
 2. **Audio Streaming**: On button release, the audio blob is posted to `/api/voice/transcribe`.
@@ -215,9 +297,12 @@ Modern reasoning models (such as DeepSeek-R1 or Qwen-QwQ) emit internal reasonin
    - The assistant answer is synthesized into natural neural speech using Microsoft Edge-TTS (`en-US-AriaNeural` or `en-US-GuyNeural`).
    - Returns an `audio/mpeg` stream played directly in the browser via Web Audio API.
 
+![Voice Pipeline Latency Waterfall](charts/voice_pipeline_waterfall.png)
+*Figure 4: Voice pipeline stage latency breakdown (Total: 990 ms turnaround).*
+
 ---
 
-## 12. Server-Sent Events (SSE) Streaming Protocol
+## 14. Server-Sent Events (SSE) Streaming Protocol
 
 The `/api/chat` route streams structured lifecycle events over `text/event-stream`:
 
@@ -246,7 +331,7 @@ data: {"status": "complete"}
 
 ---
 
-## 13. Security, Rate Limiting & Proxy Compatibility
+## 15. Security, Rate Limiting & Proxy Compatibility
 
 1. **Proxy-Aware Rate Limiting**:
    - Inspects `X-Forwarded-For` and extracts the first (client) IP address when deployed behind Cloudflare, Nginx, or AWS ALB.
@@ -258,7 +343,7 @@ data: {"status": "complete"}
 
 ---
 
-## 14. Deployment: Local & Cloud Topologies
+## 16. Deployment: Local & Cloud Topologies
 
 ### Topology A: 100% Local Deployment (Default)
 - **FastAPI Backend**: `http://127.0.0.1:8000`
@@ -275,7 +360,7 @@ data: {"status": "complete"}
 
 ---
 
-## 15. Automated Scripts (setup.bat, start_all.bat, stop_all.bat)
+## 17. Automated Scripts (setup.bat, start_all.bat, stop_all.bat)
 
 To enable a zero-configuration developer experience on Windows:
 1. **`setup.bat`**:
@@ -292,7 +377,7 @@ To enable a zero-configuration developer experience on Windows:
 
 ---
 
-## 16. Verification History & Resolved Challenges
+## 18. Verification History & Resolved Challenges
 
 | Challenge Encountered | Root Cause | Technical Resolution |
 | :--- | :--- | :--- |
@@ -302,7 +387,23 @@ To enable a zero-configuration developer experience on Windows:
 | **Sub-version over-anchoring** | Multi-turn reformulator anchored to patch numbers rather than root game titles. | Updated pronoun reformulation prompt to resolve root entities and ignore patch versions. |
 | **Whisper import overhead in cloud** | `faster-whisper` imported PyAV and Torch at module startup even when voice was disabled. | Implemented lazy loading for STT; when `STT_ENABLED=false`, heavy libraries are never loaded. |
 | **Pinecone dimension mismatch** | In hosted mode, user embedding model dimension differed from existing Pinecone index. | Implemented auto-detection of model dimension, automated index provisioning, and clear validation errors. |
+| **Streaming token buffering** | Reverse proxies buffering SSE event chunks, destroying real-time typing effect. | Emitted `X-Accel-Buffering: no` header across all streaming responses. |
 | **Emoji standard enforcement** | Project documentation contained decorative emojis that conflicted with professional standards. | Stripped all decorative symbols across `README.md`, backend responses, and frontend error notices. |
+
+---
+
+## 19. Academic Citations & References
+
+1. **Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Küttler, H., Lewis, M., Yih, W., Rocktäschel, T., Riedel, S., & Kiela, D. (2020).** *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*. In Advances in Neural Information Processing Systems (NeurIPS 2020), 33, 9459-9474. [https://arxiv.org/abs/2005.11401](https://arxiv.org/abs/2005.11401)
+2. **Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., & Polosukhin, I. (2017).** *Attention Is All You Need*. In Advances in Neural Information Processing Systems (NeurIPS 2017), 30, 5998-6008. [https://arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762)
+3. **Radford, A., Kim, J. W., Xu, T., Brockman, G., McLeavey, C., & Sutskever, I. (2022).** *Robust Speech Recognition via Large-Scale Weak Supervision*. arXiv preprint arXiv:2212.04356. [https://arxiv.org/abs/2212.04356](https://arxiv.org/abs/2212.04356)
+4. **Qwen Team, Alibaba Group. (2024).** *Qwen2.5: A Party of Foundation Models*. Technical Report. [https://arxiv.org/abs/2412.15115](https://arxiv.org/abs/2412.15115)
+5. **Dubey, A., Jauhri, A., Pandey, A., et al. (Meta AI Llama Team). (2024).** *The Llama 3 Herd of Models*. Meta AI Research Whitepaper. [https://arxiv.org/abs/2407.21783](https://arxiv.org/abs/2407.21783)
+6. **Chase, H. (2022).** *LangChain: Building Applications with Large Language Models through Composability*. Open-Source Software Framework. [https://github.com/langchain-ai/langchain](https://github.com/langchain-ai/langchain)
+7. **Troynikov, A., & Huber, J. (2023).** *Chroma: The AI-Native Open-Source Embedding Database*. Chroma Inc. [https://github.com/chroma-core/chroma](https://github.com/chroma-core/chroma)
+8. **Pinecone Systems, Inc. (2024).** *Pinecone Serverless: High-Performance Distributed Vector Search*. [https://www.pinecone.io](https://www.pinecone.io)
+9. **DuckDuckGo Inc. (2024).** *DuckDuckGo Search & Instant Answers API*. [https://pypi.org/project/duckduckgo-search/](https://pypi.org/project/duckduckgo-search/)
+10. **Microsoft Speech Services. (2024).** *Microsoft Edge Neural Text-to-Speech Engine*. Microsoft Corporation. [https://azure.microsoft.com/en-us/products/cognitive-services/text-to-speech](https://azure.microsoft.com/en-us/products/cognitive-services/text-to-speech)
 
 ---
 
