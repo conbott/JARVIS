@@ -44,7 +44,8 @@ A private, offline-capable, full-stack **Local RAG & Voice Assistant** built wit
 ## Documentation
 
 For in-depth technical specifications, design patterns, and full project implementation details:
-- **[Comprehensive Project Documentation](docs/PROJECT_DOCUMENTATION.md)**: Full end-to-end report on all features, hardware detection, spread retrieval, anti-hallucination engines, voice pipeline, and testing history.
+- **[Publication-Grade Technical Documentation (PDF)](docs/Jarvis_Project_Documentation.pdf)**: Complete 13-page academic and engineering report with architectural diagrams, mathematical formulations, implementation code snippets, and embedded evaluation metric figures.
+- **[Comprehensive Project Documentation (Markdown)](docs/PROJECT_DOCUMENTATION.md)**: Full end-to-end report on all features, hardware detection, spread retrieval, anti-hallucination engines, voice pipeline, and testing history.
 - **[System Architecture & Specifications](docs/ARCHITECTURE.md)**: Data flows, sequence diagrams, SSE event schemas, spread retrieval strategy, and LangChain module mappings.
 
 ---
