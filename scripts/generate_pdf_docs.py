@@ -422,7 +422,7 @@ def create_styled_pdf(filename="docs/Jarvis_Project_Documentation.pdf"):
 
     story.append(Paragraph("2) Technical Specifications & Software Documentation Corpora:", h2_style))
     story.append(Paragraph(
-        "Internal project specifications and Markdown documentation files (<code>README.md</code>, <code>docs/ARCHITECTURE.md</code>, <code>report_for_claude.md</code>) "
+        "Internal project specifications and Markdown documentation files (<code>README.md</code>, <code>docs/ARCHITECTURE.md</code>, <code>docs/general_docs.md</code>) "
         "were ingested to benchmark code-block parsing, markdown table extraction, and zero-shot question answering over codebase conventions.",
         body_style
     ))

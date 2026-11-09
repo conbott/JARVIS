@@ -110,7 +110,7 @@ To evaluate the dual RAG and search pipelines across technical, dense, and open-
 - **Evaluation Purpose**: Serves as the gold standard for testing chunk boundary splitting, 1-based page metadata preservation, bibliographic citation filtering, and whole-document Spread Retrieval synthesis.
 
 ### B. Technical Software Documentation & Specifications
-- **Corpus Content**: Internal system architecture documents (`docs/ARCHITECTURE.md`), Markdown specification reports (`report_for_claude.md`), and API documentation (`README.md`).
+- **Corpus Content**: Internal system architecture documents (`docs/ARCHITECTURE.md`), general technical specifications (`docs/general_docs.md`), and API documentation (`README.md`).
 - **Characteristics**: GitHub-flavored markdown with code fences, JSON schemas, nested bullet lists, and technical tables.
 - **Evaluation Purpose**: Benchmarks code preservation, syntax-highlighted code block extraction, and zero-shot question answering over system specifications.
 

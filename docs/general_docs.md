@@ -1,4 +1,4 @@
-# RAG & Voice Assistant: Technical Architecture & Code Report
+# General Technical Documentation & Architecture Report
 
 ### 1. SSE SOURCES PAYLOAD
 
